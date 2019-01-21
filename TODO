@@ -1,0 +1,6 @@
+☐ What about non-string arguments? Maybe add --expr before value like for the main exprression?
+☐ Prevent redownloading.
+☐ Support builtins like builtins.fetchurl. This is difficult to do, because unlike other fetchers, it will realize the generated derivation immediately.
+☐ Add a help for fetchers.
+☐ Cleanup and document prefetch.nix some more.
+☐ Document the logic behind validating the hash.
