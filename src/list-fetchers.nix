@@ -17,4 +17,4 @@ let
     builtins = builtins // { recurseForDerivations = true; };
   });
 
-in concatMapStrings (s: s + "\n") fetchers
+in lines fetchers
