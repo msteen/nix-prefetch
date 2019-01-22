@@ -60,7 +60,7 @@ Examples
 A package source:
 
 ```
-> nix-prefetch hello.src
+$ nix-prefetch hello.src
 Prefetching source hello-2.10.tar.gz...
 The fetcher will be run as follows:
 > fetchurl {
@@ -77,7 +77,7 @@ mirror://gnu/hello/hello-2.10.tar.gz
 A package without a hash defined:
 
 ```
-> nix-prefetch test
+$ nix-prefetch test
 Prefetching package test-0.1.0...
 The fetcher will be run as follows:
 > fetchurl {
@@ -95,7 +95,7 @@ https://gist.githubusercontent.com/msteen/fef0b259aa8e26e9155fa0f51309892c/raw/1
 Modify the Git revision of a call to `fetchFromGitHub`:
 
 ```
-> nix-prefetch openraPackages.engines.bleed --fetch-url --rev master
+$ nix-prefetch openraPackages.engines.bleed --fetch-url --rev master
 Prefetching package openra-bleed-6de92de...
 The fetcher will be run as follows:
 > fetchurl {
@@ -112,7 +112,7 @@ https://github.com/OpenRA/OpenRA/archive/master.tar.gz
 Hash validation:
 
 ```
-> nix-prefetch hello 0000000000000000000000000000000000000000000000000000
+$ nix-prefetch hello 0000000000000000000000000000000000000000000000000000
 Prefetching package hello-2.10...
 The fetcher will be run as follows:
 > fetchurl {
@@ -131,7 +131,7 @@ Error: A hash mismatch occurred for the fixed-output derivation output '/nix/sto
 A specific file fetcher:
 
 ```
-> nix-prefetch du-dust.cargoDeps --fetcher '<nixpkgs/pkgs/build-support/rust/fetchcargo.nix>'
+$ nix-prefetch du-dust.cargoDeps --fetcher '<nixpkgs/pkgs/build-support/rust/fetchcargo.nix>'
 Prefetching source dust-0.2.3-vendor...
 The fetcher will be run as follows:
 > /nix/store/sx4gggi0fx6cp2lx7klkk2vp2x2vank0-fetchcargo.nix {
@@ -150,7 +150,7 @@ The fetcher will be run as follows:
 List all known fetchers in Nixpkgs:
 
 ```
-> nix-prefetch --list --deep
+$ nix-prefetch --list --deep
 builtins.fetchGit
 builtins.fetchMercurial
 builtins.fetchTarball
@@ -200,7 +200,7 @@ python36Packages.fetchPypi
 Get a specialized help message for a fetcher:
 
 ```
-> nix-prefetch fetchFromGitHub --help
+$ nix-prefetch fetchFromGitHub --help
 The fetcher fetchFromGitHub produces a fixed-output derivation to use as a source.
 
 All options can be repeated with the last value taken,
