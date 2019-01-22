@@ -36,13 +36,11 @@ Limitations
   For example the following will not work:
 
   ```nix
-  let fetcher = stdenv.mkDerivation { outputHash = ...; ... };
+  let fetcher = stdenv.mkDerivation { outputHash = "..."; };
   in stdenv.mkDerivation {
-    ...
     src = fetcher {
       foo = 5;
     };
-    ...
   }
   ```
 
