@@ -21,10 +21,6 @@ nix-env --install --file release.nix
 Planned features
 ---
 
-* Keep the failed build around to prevent the need to re-download the sources
-  and automatically rebuild the source with the corrected hash.
-  This is especially useful for big downloads.
-
 * Implement support for the builtin fetchers (see Limitations).
 
 Limitations
