@@ -232,6 +232,8 @@ while (( $# >= 1 )); do
       (( $# >= 1 )) || die_option_param 'output'
       output_type=$1 && shift
       ;;
+    --with-position) with_position=1;;
+    --diff) diff=1;;
     --fetch-url) fetch_url=1;;
     --print-path) print_path=1;;
     --force) force=1;;
@@ -240,7 +242,6 @@ while (( $# >= 1 )); do
     -vv|--debug) quiet=0 && verbose=1 && debug=1;;
     --skip-hash) skip_hash=1;;
     --help) help=1;;
-    --with-position) with_position=1;;
     --) break;;
     *)
       if [[ $arg == -* ]]; then
@@ -350,8 +351,14 @@ print_actual_hash() {
   fi
 
   if [[ $output_type != raw ]]; then
-    (( with_position )) && hash_json='.'"$hash_algo"'.value = "'"$actual_hash"'"' || hash_json='.'"$hash_algo"' = "'"$actual_hash"'"'
-    json=$(jq --raw-output '.output | '"$hash_json" <<< "$out")
+    if (( diff )) && [[ $expected_hash == "$actual_hash" ]]; then
+      output_jq='del(.'"$hash_algo"')'
+    else
+      (( with_position )) && output_jq='.'"$hash_algo"'.value = "'"$actual_hash"'"' || output_jq='.'"$hash_algo"' = "'"$actual_hash"'"'
+    fi
+    json=$(jq --raw-output '.output | '"$output_jq" <<< "$out")
+  elif (( diff )); then
+    die "Diff is not supported for raw output."
   fi
 
   case $output_type in
@@ -386,6 +393,7 @@ exprArgs="{
   hash = $( [[ -v hash ]] && nix_str "$hash" || echo null );
   fetchURL = $(nix_bool "$fetch_url");
   withPosition = $(nix_bool "$with_position");
+  diff = $(nix_bool "$diff");
   quiet = $(nix_bool "$quiet");
   verbose = $(nix_bool "$verbose");
   debug = $(nix_bool "$debug");

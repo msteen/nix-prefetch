@@ -174,7 +174,12 @@ in with lib; let
 
       args = removeAttrs orig.fetcher.args hashAlgos // fetcherArgs // hashArgs;
 
-      fetcher = { origArgPositions = mapAttrs (name: _: unsafeGetAttrPos name orig.fetcher.args) orig.fetcher.args; } // (if orig.fetchURL then {
+      fetcher = {
+        origArgPositions = mapAttrs (name: _: unsafeGetAttrPos name orig.fetcher.args) orig.fetcher.args;
+        oldArgs = orig.fetcher.args;
+        newArgs = fetcherArgs;
+        hashArgs = hashArgs;
+      } // (if orig.fetchURL then {
         name = "fetchurl";
         fun = pkgs.fetchurl;
         # FIXME: Check fetcher arguments for the URL.

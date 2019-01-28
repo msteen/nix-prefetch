@@ -1,4 +1,5 @@
 let lib = builtins // import <nixpkgs/lib>; in with lib; lib // rec {
+  applyIf = pred: f: x: if pred x then f x else x;
   quotRem = x: y: rec { quot = builtins.div x y; rem = x - y * quot; };
   repeatString = n: s:
     let

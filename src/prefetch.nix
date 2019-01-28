@@ -18,6 +18,15 @@ let
     then src.overrideAttrs (_: { outputHash = probablyWrongHashes.${hashAlgo}; })
     else src;
 
+  diffFetcherArgs = args: filterAttrs (name: value: value != fetcher.oldArgs.${name}) (builtins.intersectAttrs fetcher.newArgs args)
+    // fetcher.hashArgs; # The actual hash is only known after running this program, so we want to keep it regardless.
+
+  addFetcherArgPositions = args: mapAttrs (name: value: {
+    position = fetcher.origArgPositions.${name}
+      or (throw "Cannot get position the position for fetcher argument '${name}', since it does not already exist in the fetcher call.");
+    inherit value;
+  });
+
   json = recursiveUpdate {
     bash_vars = mapAttrs (const toString) {
       hash_algo = hashAlgo;
@@ -27,13 +36,7 @@ let
       fetcher = fetcher.name;
     };
     inherit log;
-    output = if orig.withPosition
-      then mapAttrs (name: value: {
-        position = fetcher.origArgPositions.${name}
-          or (throw "Cannot get position the position for fetcher argument '${name}', since it does not already exist in the fetcher call.");
-        inherit value;
-      }) fetcher.args
-      else fetcher.args;
+    output = applyIf (const orig.withPosition) addFetcherArgPositions (applyIf (const orig.diff) diffFetcherArgs fetcher.args);
   } (optionalAttrs (!isBuiltinFetcher) {
     bash_vars = mapAttrs (const toString) {
       wrong_drv_path = wrongSrc.drvPath;
