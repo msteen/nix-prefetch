@@ -1,13 +1,26 @@
 `nix-prefetch`
 ===
 
-This tool can be used to determine the hash of a fixed-output derivation, such as a package source.
+This tool can be used to determine the hash of a fixed-output derivation, such as a package source. This can be used to apply TOFU in Nixpkgs (see TOFU below).
 Besides determining the hash, you can also pass it a hash, and then it will validate it.
 It should work with any fetcher function (function that produces a fixed-output derivation),
 package derivations, or fixed-output derivations. In the case of the latter two (i.e. the derivations),
 it will reuse the arguments already passed to the fetcher.
 
 This tool is meant to help facilitate automatic update scripts.
+
+TOFU
+--
+
+Trust-On-First-Use (TOFU) is a security model that will trust that, the response given by the non-yet-trusted endpoint,
+is correct on first use and will derive an identifier from it to check the trustworthiness of future requests to the endpoint.
+An well-known example of this is with SSH connections to hosts that are reporting a not-yet-known host key.
+In the context of Nixpkgs, TOFU can be applied to fixed-output derivation (like produced by fetchers) to supply it with an output hash.
+https://en.wikipedia.org/wiki/Trust_on_first_use
+
+To implement the TOFU security model for fixed-output derivations the output hash has to determined at first build.
+This can be achieved by first supplying the fixed-output derivation with a probably-wrong output hash,
+that forces the build to fail with a hash mismatch error, which contains in its error message the actual output hash.
 
 Installation
 ---
@@ -21,7 +34,12 @@ nix-env --install --file release.nix
 Planned features
 ---
 
-* Implement support for the builtin fetchers (see Limitations).
+* Try and see how many fetchers can be to not ignore certificate validity checking,
+  without having to modify the fetchers themselves, to prevent potential man-in-the-middle (MITM) attacks when prefetching.
+* Improve tracking the origin (i.e. position) of fetcher arguments,
+  like the origin of inherited attributes from an expression (e.g. `inherit (expr) attr;`),
+  to help facilitate tools like https://github.com/msteen/nix-update-fetch.
+* Auto-completion for fetcher arguments (of either fetcher functions or package sources) should be possible with some extra tricks.
 
 Limitations
 ---
@@ -41,14 +59,13 @@ Limitations
   ```
 
   We would not be able to extract that `{ foo = 5; }` was passed to the fetcher.
+  
+  Using import-from-derivation (IFD) or `builtins.exec` together with a rewriter based on `rnix` like `nix-update-fetch` does,
+  we could in theory even handle this case, but it is not worth implementing at the moment,
+  considering this is an edge case I have yet to encounter.
 
-* If a fetcher is based on another fetcher, we will not be able to list all its possible arguments
+* Right now (see Planned features), if a fetcher is based on another fetcher, we will not be able to list all its possible arguments
   in the fetcher's help message.
-
-* The builtin fetchers will build a derivation and realize it immediately,
-  while the implementation expects to do those things seperately.
-  By making a special case for the builtins this could be worked around,
-  but at the moment builtin fetchers are not supported.
 
 Examples
 ---
