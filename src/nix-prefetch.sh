@@ -1,5 +1,15 @@
 #!/usr/bin/env bash
 
+# Trust-On-First-Use (TOFU) is a security model that will trust that, the response given by the non-yet-trusted endpoint,
+# is correct on first use and will derive an identifier from it to check the trustworthiness of future requests to the endpoint.
+# An well-known example of this is with SSH connections to hosts that are reporting a not-yet-known host key.
+# In the context of Nixpkgs, TOFU can be applied to fixed-output derivation (like produced by fetchers) to supply it with an output hash.
+# https://en.wikipedia.org/wiki/Trust_on_first_use
+
+# To implement the TOFU security model for fixed-output derivations the output hash has to determined at first build.
+# This can be achieved by first supplying the fixed-output derivation with a probably-wrong output hash,
+# that forces the build to fail with a hash mismatch error, which contains in its error message the actual output hash.
+
 ## ##
 ## Configuration
 
@@ -9,14 +19,29 @@ version='@version@'
 ## ##
 ## Helper functions
 
+die() {
+  echo "error: $*" >&2
+  exit 1
+}
+
+die_help() {
+  show_help 0
+  echo >&2
+  die "$@"
+}
+
+quote() {
+  grep -q '^[a-zA-Z0-9_]\+$' <<< "$*" && echo "$*" || echo "'$(sed "s/'/\\\\'/" <<< "$*")'"
+}
+
 print_args() {
   for arg in "$@"; do
-    printf ' %q' "$arg"
+    printf ' %s' "$(quote "$arg")"
   done
 }
 
 print_assign() {
-  printf '> %s=%q\n' "$1" "$2" >&2
+  printf '> %s=%s\n' "$1" "$(quote "$2")" >&2
 }
 
 print_vars() {
@@ -30,9 +55,11 @@ print_cli_vars() {
   print_vars "$1"
 }
 
-print_nix_args() {
+print_nix_eval_args() {
   echo "Based on the arguments, the Nix component will be run as follows:" >&2
-  sed 's/^/> /' <<< "$1 $2" >&2
+  local nix="$1 $2"
+  local n=$(grep -o '\( *\)' <(tail -1 <<< "$nix") | tr -d '\n' | wc -c)
+  { (( n )) && sed "s/^[ ]\{$n\}?/> /" || sed 's/^/> /'; } <<< "$nix" >&2
   echo >&2
 }
 
@@ -74,102 +101,22 @@ list_fetchers() {
     print_cli_vars 'file deep'
     echo >&2
   fi
-  nixArgs="{
-  inherit lib;
-  file = toExpr ($file);
-  deep = $(nix_bool "$deep");
-}"
-  (( verbose )) && print_nix_args 'listFetchers' "$nixArgs"
+  listFetchersArgs="{
+    nixpkgsPath = ($file);
+    deep = $(nix_bool "$deep");
+  }"
+  (( verbose )) && print_nix_eval_args 'listFetchers' "$listFetchersArgs"
   (( debug )) && nix_eval_args=( --show-trace )
-  nix eval --raw "(let lib = import $lib/lib.nix; in with lib; import $lib/list-fetchers.nix $nixArgs)" "${nix_eval_args[@]}"
+  nix eval --raw "(
+    with $listFetchersArgs;
+    with import $lib/lib-nixpkgs.nix nixpkgsPath;
+    lines (listFetchers deep pkgs)
+  )" "${nix_eval_args[@]}"
 }
 
 show_help() {
   normal=$1
-  cat <<'EOF' > "/dev/std$( (( normal )) && echo out || echo err )"
-Prefetch any fetcher function call, e.g. a package source.
-
-All options can be repeated with the last value taken,
-and can placed both before and after the parameters.
-
-Usage:
-  nix-prefetch [ -f <file> | --file <file>
-               | -A <attr> | --attr <attr>
-               | -E <expr> | --expr <expr>
-               | -i <index> | --index <index>
-               | -F (<file> | <attr>) | --fetcher (<file> | <attr>)
-               | -t <hash-algo> | --type <hash-algo> | --hash-algo <hash-algo>
-               | -h <hash> | --hash <hash>
-               | --fetch-url | --print-path | --force
-               | -q | --quiet | -v | --verbose | -vv | --debug | --skip-hash ]...
-               ( -f <file> | --file <file> | <file>
-               | -A <attr> | --attr <attr> | <attr>
-               | -E <expr> | --expr <expr> | <expr>
-               | <url> )
-               [hash]
-               [--]
-               [ --<name>
-                 ( -f <file> | --file <file>
-                 | -A <attr> | --attr <attr>
-                 | -E <expr> | --expr <expr>
-                 | <str> ) ]...
-  nix-prefetch [-f <file> | --file <file> | --deep | -v | --verbose | -vv | --debug]... (-l | --list)
-  nix-prefetch --help
-  nix-prefetch [-v | --verbose | -vv | --debug] (-f <file> | --file <file> | <attr>) --help
-  nix-prefetch --version
-
-Examples:
-  nix-prefetch hello
-  nix-prefetch hello --hash-algo sha512
-  nix-prefetch hello.src
-  nix-prefetch 'let name = "hello"; in pkgs.${name}'
-  nix-prefetch 'callPackage (pkgs.path + /pkgs/applications/misc/hello) { }'
-  nix-prefetch --file '<nixos-unstable>' hello
-  nix-prefetch hello 0000000000000000000000000000000000000000000000000000
-  nix-prefetch du-dust.cargoDeps --fetcher --file '<nixpkgs/pkgs/build-support/rust/fetchcargo.nix>'
-
-Options:
-  -f, --file       When either an attribute or expression is given it has to be a path to Nixpkgs,
-                   otherwise it can be a file directly pointing to a fetcher function or package derivation.
-  -A, --attr       An attribute path relative to the `pkgs` of the imported Nixpkgs.
-  -E, --expr       A Nix expression with the `pkgs` of the imported Nixpkgs put into scope,
-                   evaluating to either a fetcher function or package derivation.
-  -i, --index      Which element of the list of sources should be used when multiple sources are available.
-  -F, --fetcher    When the fetcher of the source cannot be automatically determined,
-                   this option can be used to pass it manually instead.
-  -t, --type,
-      --hash-algo  What algorithm should be used for the output hash of the resulting derivation.
-  -h, --hash       When the output hash of the resulting derivation is already known,
-                   it can be used to check whether it is already exists within the Nix store.
-  --fetch-url      Fetch only the URL. This converts e.g. the fetcher fetchFromGitHub to fetchurl for its URL,
-                   and the hash options will be applied to fetchurl instead. The name argument will be copied over.
-  --print-path     Print the output path of the resulting derivation.
-  --force          Always redetermine the hash, even if the given hash is already determined to be valid.
-  -q, --quiet      No additional output.
-  -v, --verbose    Verbose output, so it is easier to determine what is being done.
-  -vv, --debug     Even more verbose output (meant for debugging purposes).
-  --skip-hash      Skip determining the hash (meant for debugging purposes).
-  --deep           Rather than only listing the top-level fetchers, deep search Nixpkgs for fetchers (slow).
-  -l, --list       List the available fetchers in Nixpkgs.
-  --version        Show version information.
-  --help           Show help message.
-
-Note: This program is EXPERIMENTAL and subject to change.
-EOF
-}
-
-show_fetcher_help() {
-  if (( verbose )); then
-    print_cli_vars 'fetcher fetcher_is_file'
-    echo >&2
-  fi
-  nixArgs="{
-  inherit lib;
-  fetcher = $( (( fetcher_is_file )) && echo "$fetcher" || nix_str "$fetcher" );
-}"
-  (( verbose )) && print_nix_args 'showFetcherHelp' "$nixArgs"
-  (( debug )) && nix_eval_args=( --show-trace )
-  nix eval --raw "(let lib = import $lib/lib.nix; in with lib; import $lib/show-fetcher-help.nix $nixArgs)" "${nix_eval_args[@]}"
+  cat HELP > "/dev/std$( (( normal )) && echo out || echo err )"
 }
 
 show_version() {
@@ -178,17 +125,6 @@ show_version() {
 
 ## ##
 ## Command line arguments
-
-die() {
-  echo "Error: $*" >&2
-  exit 1
-}
-
-die_help() {
-  show_help 0
-  echo >&2
-  die "$@"
-}
 
 die_extra_param() {
   die_help "An unexpected extra parameter '$1' has been given."
@@ -201,6 +137,18 @@ die_option_param() {
 die_arg_count() {
   die_help "A wrong number of arguments has been given."
 }
+
+set_fetcher() {
+  local type expr
+  if [[ $1 == */* && -e $1 || $1 == '<'* ]]; then
+    local type=path expr=$1
+  else
+    local type=attr expr=$(nix_str "$1")
+  fi
+  fetcher=$(printf '{ type = "%s"; expr = %s; }' "$type" "$expr")
+}
+
+orig_args=( "$@" )
 
 # Each command should be handled differently and to prevent issues like determinig their priorities,
 # we do not allow them to be mixed, so e.g. calling adding --version while also having other arguments,
@@ -217,13 +165,13 @@ case $1 in
     ;;
 esac
 
+file='<nixpkgs>'
+
 # We need to be able to differentiate the remaining commands,
 # because they will have different arguments available to them.
-cmd=prefetch
 for arg in "$@"; do
   case $arg in
     -l|--list)
-      file='<nixpkgs>'
       while (( $# >= 1 )); do
         arg=$1 && shift
         case $arg in
@@ -232,38 +180,19 @@ for arg in "$@"; do
             file=$1
             ;;
           --deep) deep=1;;
-          -vv|--debug) debug=1 && verbose=1;;
+          -v|--verbose) verbose=1;;
+          -vv|--debug) verbose=1 && debug=1;;
           *) [[ $arg =~ ^(-l|--list)$ ]] || die_extra_param "$arg";;
         esac
       done
       list_fetchers
       exit
     ;;
-    --help)
-      while (( $# >= 1 )); do
-        arg=$1 && shift
-        case $arg in
-          -vv|--debug) debug=1 && verbose=1;;
-          --help) continue;;
-          -f|--file)
-            (( $# >= 1 )) || die_option_param 'file'
-            fetcher=$1 && fetcher_is_file=1 && shift
-            ;;
-          *)
-            (( ! arg_count )) || die_extra_param "$arg"
-            fetcher=$arg
-            (( arg_count++ ))
-            ;;
-        esac
-      done
-      [[ -v fetcher ]] || die_help "At least a file or attribute should have been given."
-      show_fetcher_help
-      exit
-    ;;
   esac
 done
 
 file='<nixpkgs>'
+output_type=raw
 while (( $# >= 1 )); do
   arg=$1 && shift
   case $arg in
@@ -285,8 +214,7 @@ while (( $# >= 1 )); do
       ;;
     -F|--fetcher)
       (( $# >= 1 )) || die_option_param 'fetcher'
-      fetcher=$1 && shift
-      [[ $fetcher == */* && -e $fetcher || $fetcher == '<'* ]] && fetcher_is_file=1
+      set_fetcher "$1" && shift
       ;;
     -t|--type|--hash-algo)
       (( $# >= 1 )) || die_option_param 'hash_algo'
@@ -296,13 +224,23 @@ while (( $# >= 1 )); do
       (( $# >= 1 )) || die_option_param 'hash'
       hash=$1 && shift
       ;;
+    --input)
+      (( $# >= 1 )) || die_option_param 'input'
+      input_type=$1 && shift
+      ;;
+    --output)
+      (( $# >= 1 )) || die_option_param 'output'
+      output_type=$1 && shift
+      ;;
     --fetch-url) fetch_url=1;;
     --print-path) print_path=1;;
     --force) force=1;;
-    --q|--quiet) quiet=1;;
-    -v|--verbose) verbose=1;;
-    -vv|--debug) debug=1 && verbose=1;;
+    --q|--quiet) quiet=1 && verbose=0 && debug=0;;
+    -v|--verbose) quiet=0 && verbose=1;;
+    -vv|--debug) quiet=0 && verbose=1 && debug=1;;
     --skip-hash) skip_hash=1;;
+    --help) help=1;;
+    --with-position) with_position=1;;
     --) break;;
     *)
       if [[ $arg == -* ]]; then
@@ -362,6 +300,20 @@ done
 # There should be no more arguments left if all arguments were valid.
 (( $# == 0 )) || die_help "Finished parsing the command line arguments, yet still found the following arguments remaining:$(print_args "$@")."
 
+if [[ -n $input_type ]]; then
+  input=$(< /dev/stdin)
+  if [[ $input_type == nix ]]; then
+    input=$(nix-instantiate --eval --strict --expr "{ args }: with import $lib/lib.nix; toShell args" --arg args "$input" --show-trace | jq --raw-output '.') || exit
+  elif [[ $input_type == json ]]; then
+    input=$(jq --raw-output 'to_entries | .[] | .key + "=" + .value' <<< "$input") || exit
+  fi
+  while IFS= read -r line; do
+    [[ $line == *'='* ]] || die "Invalid input '$line', expected a name value pair seperated by an equal sign."
+    IFS='=' read -r name value <<< "$line"
+    fetcher_args[$name]=$(nix_expr 'str' "$value")
+  done <<< "$input"
+fi
+
 # When no other expressions are given but the file, set the file to be the expression,
 # because then it ought to point to either a fetcher function or package derivation.
 if [[ -v file && ! -v expr ]]; then
@@ -381,6 +333,35 @@ if (( verbose )); then
   echo >&2
 fi
 
+hash_from_err() {
+  # The hash mismatch error message has changed in version 2.2 of Nix,
+  # swapping the order of the reported hashes.
+  # https://github.com/NixOS/nix/commit/5e6fa9092fb5be722f3568c687524416bc746423
+  if ! actual_hash=$(grep --only-matching "[a-z0-9]\{$actual_hash_size\}" <<< "$err" > >( [[ $err == *'instead of the expected hash'* ]] && head -1 || tail -1 )); then
+    [[ -n $out ]] && echo "$out" >&2
+    [[ -n $err ]] && echo "$err" >&2
+    issue "The only expected error message is that of a hash mismatch, yet the grep for it failed."
+  fi
+}
+
+print_actual_hash() {
+  if (( check_hash )) && [[ $expected_hash != "$actual_hash" ]]; then
+    die "$(printf "A hash mismatch occurred for the fixed-output derivation output '%s':\n  expected: %s\n    actual: %s" "$output" "$expected_hash" "$actual_hash")"
+  fi
+
+  if [[ $output_type != raw ]]; then
+    (( with_position )) && hash_json='.'"$hash_algo"'.value = "'"$actual_hash"'"' || hash_json='.'"$hash_algo"' = "'"$actual_hash"'"'
+    json=$(jq --raw-output '.output | '"$hash_json" <<< "$out")
+  fi
+
+  case $output_type in
+    raw) echo "$actual_hash";;
+    shell) jq --raw-output 'to_entries | .[] | .key + "=" + .value' <<< "$json";;
+    nix) nix-instantiate --eval --strict --expr '{ json }: builtins.fromJSON json' --argstr json "$json";;
+    json) echo "$json";;
+  esac
+}
+
 expr=$(nix_expr "$expr_type" "$expr")
 
 fetcherArgs='{'
@@ -388,79 +369,118 @@ for name in "${!fetcher_args[@]}"; do
   value=${fetcher_args[$name]}
   fetcherArgs+=$'\n    '"$name = $value;"
 done
-fetcherArgs+=$'\n  }'
+[[ $fetcherArgs != '{' ]] && fetcherArgs+=$'\n  '
+fetcherArgs+='}'
 
-nixArgs="{
-  inherit lib;
+json_file=/tmp/nix-prefetch.$(date +%s%N).json
+
+exprArgs="{
+  writeFile = $lib/write_file.sh;
+  jsonFile = $json_file;
   nixpkgsPath = ($file);
   expr = $expr;
   index = $( [[ -v index ]] && echo "$index" || echo null );
-  fetcher = $( [[ -v fetcher ]] && { (( fetcher_is_file )) && echo "$fetcher" || nix_str "$fetcher"; } || echo null );
+  fetcher = $( [[ -v fetcher ]] && echo "$fetcher" || echo null );
   fetcherArgs = $fetcherArgs;
   hashAlgo = $( [[ -v hash_algo ]] && nix_str "$hash_algo" || echo null );
   hash = $( [[ -v hash ]] && nix_str "$hash" || echo null );
   fetchURL = $(nix_bool "$fetch_url");
+  withPosition = $(nix_bool "$with_position");
   quiet = $(nix_bool "$quiet");
   verbose = $(nix_bool "$verbose");
   debug = $(nix_bool "$debug");
 }"
 
-(( verbose )) && print_nix_args 'prefetch' "$nixArgs"
-
+(( verbose )) && print_nix_eval_args 'prefetch' "$exprArgs"
 (( debug )) && nix_eval_args=( --show-trace )
-raw=$(nix eval --raw "(let lib = import $lib/lib.nix; in with lib; import $lib/prefetch.nix $nixArgs)" "${nix_eval_args[@]}") || exit
 
-# The raw output contains a log and the information about the resulting derivation of the fetcher.
-vars='wrong_drv_path drv_path output expected_hash actual_hash_size check_hash'
-IFS=':' read -r $vars < <(tail -1 <<< "$raw")
-if [[ ! $check_hash =~ ^[01]$ ]]; then
-  echo "$raw" >&2
-  issue "The Nix component of the prefetcher should always return a valid line of information, yet it failed to produce one."
+if (( help )); then
+  nix eval --raw "(import $lib/showFetcherHelp.nix $exprArgs)" "${nix_eval_args[@]}"
+  exit
 fi
-head -n -1 <<< "$raw" >&2
+
+nix_eval_args+=( --option allow-unsafe-native-code-during-evaluation true )
+
+# https://unix.stackexchange.com/questions/430161/redirect-stderr-and-stdout-to-different-variables-without-temporary-files/430182#430182
+{
+  out=$(nix eval --json "(import $lib/prefetch.nix $exprArgs)" "${nix_eval_args[@]}" 2> /dev/fd/3)
+  ret=$?
+  err=$(cat <&3)
+} 3<<EOF
+EOF
+
+if (( ret )); then
+  if [[ -e $json_file && ($err == *'instead of the expected hash'* || $err == *'hash mismatch'*) ]]; then
+    builtin_fetcher=1
+    out=$(< "$json_file")
+    rm "$json_file"
+  else
+    [[ -n $err ]] && echo "$err" >&2
+    exit 1
+  fi
+fi
+
+if ! vars=$(jq --raw-output '.bash_vars | to_entries | .[] | .key + "=" + .value' <<< "$out"); then
+  [[ -n $out ]] && echo "$out" >&2
+  [[ -n $err ]] && echo "$err" >&2
+  issue "The Nix component of the prefetcher should always return a valid JSON response, yet it failed to produce one."
+fi
+
+while IFS= read -r var; do
+  declare "$var"
+done <<< "$vars"
+
+log=$(jq --raw-output '.log' <<< "$out")
+[[ -n $log ]] && printf '%s\n\n' "$log" >&2
 
 if (( verbose )); then
   echo "Based on the response of the Nix component, the following Bash variables have been set:" >&2
-  print_vars "$vars"
+  print_vars "$(jq --raw-output '.bash_vars | keys | join(" ")' <<< "$out")"
   echo >&2
 fi
 
-# When debugging something other than the hash for the prefetcher,
-# we would prefer not to waste any time on actually determining the hash.
-if (( ! skip_hash )); then
-  # Try to determine whether the current hash is already valid,
-  # so that we do not have to fetch the sources unnecessarily.
-  if (( ! force )); then
-    outputs=$(while IFS= read -r p; do [[ -e $p ]] && echo "$p"; done < <(nix-store --query --outputs $(nix-store --query --referrers $drv_path)))
-    [[ -n $outputs ]] && while IFS= read -r root; do
-      if [[ $(basename "$root") != result ]]; then
-        actual_hash=$expected_hash
-        break
-      fi
-    done < <(nix-store --query --roots $outputs)
-  fi
-
-  if [[ ! -v actual_hash ]]; then
-    if err=$(nix-store --quiet --realize "$wrong_drv_path" 2>&1); then
-      issue "A probably-wrong output hash of zeroes has been used, yet it somehow still succeeded in building."
-    fi
-
-    # The hash mismatch error message has changed in version 2.2 of Nix,
-    # swapping the order of the reported hashes.
-    # https://github.com/NixOS/nix/commit/5e6fa9092fb5be722f3568c687524416bc746423
-    if ! actual_hash=$(grep --only-matching "[a-z0-9]\{$actual_hash_size\}" <<< "$err" > >( [[ $err == *'hash mismatch'* ]] && tail -1 || head -1 )); then
-      echo "$err" >&2
-      issue "The only expected error message is that of a hash mismatch, yet the grep for it failed."
-    fi
-  fi
-
-  if (( check_hash )) && [[ $expected_hash != "$actual_hash" ]]; then
-    die "$(printf "A hash mismatch occurred for the fixed-output derivation output '%s':\n  expected: %s\n    actual: %s" "$output" "$expected_hash" "$actual_hash")"
-  fi
-
-  echo "$actual_hash"
+if [[ $fetcher == requireFile ]]; then
+  read -r url name < <(jq --raw-output '[.output.url, .output.name] | @tsv' <<< "$out")
+  # FIXME: Use orig_args to rebuild the suggested nix-prefetch call.
+  cat <<EOF >&2
+Unfortunately the file $output cannot be downloaded automatically.
+Please go to $url to download the file and add it to the Nix store like so:
+  nix-store --add-fixed $hash_algo $name
+EOF
+  exit 1
 fi
 
+if (( ! skip_hash )); then
+  if (( builtin_fetcher )); then
+    output='<unknown>'
+    hash_from_err
+  else
+    # Try to determine whether the current hash is already valid,
+    # so that we do not have to fetch the sources unnecessarily.
+    if (( ! force )); then
+      outputs=$(while IFS= read -r p; do [[ -e $p ]] && echo "$p"; done < <(nix-store --query --outputs $(nix-store --query --referrers $drv_path)))
+      [[ -n $outputs ]] && while IFS= read -r root; do
+        if [[ $(basename "$root") != result ]]; then
+          actual_hash=$expected_hash
+          break
+        fi
+      done < <(nix-store --query --roots $outputs)
+    fi
+
+    if [[ ! -v actual_hash ]]; then
+      if err=$(nix-store --quiet --realize "$wrong_drv_path" 2>&1); then
+        issue "A probably-wrong output hash of zeroes has been used, yet it somehow still succeeded in building."
+      fi
+      hash_from_err
+    fi
+  fi
+else
+  actual_hash=$expected_hash
+fi
+
+print_actual_hash
+
 if (( print_path )); then
+  [[ $output_type == raw ]] || die "The print path option only works with the default raw output."
   echo "$output"
 fi

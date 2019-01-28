@@ -11,9 +11,11 @@ let lib = builtins // import <nixpkgs/lib>; in with lib; lib // rec {
   foldrAttrs = op: nul: attrs: foldr (name: res: op name attrs.${name} res) nul (attrNames attrs);
   isPath = x: typeOf x == "path" || isString x && hasPrefix "/" x;
   isRecursable = x: try (x.recurseForDerivations or false) false;
-  isFetcher = name: x: hasPrefix "fetch" name && isFunction x;
+  # The following would have been the most accurate, but it would require evaluation:
+  # builtins.intersectAttrs (functionArgs x) (genAttrs (const null) hashAlgos) != {}
+  isFetcher = name: x: name == "requireFile" || hasPrefix "fetch" name && isFunction x;
   isSource = x: x ? outputHash && x ? outputHashMode && x ? outputHashAlgo;
-  isPackage = x: isDerivation x && (x ? src || x ? srcs);
+  isPackage = x: isDerivation x && (x ? src || x ? srcs) && !(isSource x);
   isNixpkgs = x: x ? pkgs && x ? path && x ? lib && x ? config;
   try = x: default: let res = tryEval x; in if res.success then res.value else default;
   functionArgs = f:
@@ -32,16 +34,6 @@ let lib = builtins // import <nixpkgs/lib>; in with lib; lib // rec {
   toEnglishList = sep: list: let lastIndex = length list - 1; in concatStringsSep ", " (sublist 0 lastIndex list ++ [ "${sep} ${elemAt list lastIndex}" ]);
   toAndList = toEnglishList "and";
   lines = ss: concatMapStrings (s: s + "\n") ss;
-
-  # The expression is defined as a function to allow us to bring the `pkgs` attribute of Nixpkgs into scope,
-  # upon which the actual expression might be dependent.
-  toExprFun = { type, expr }:
-    if type == "file" then const (
-      let
-        imported = import expr;
-        # When the file contains a function that can be auto-called, do so.
-        content = if isFunction imported && all id (attrValues (functionArgs imported)) then imported { } else imported;
-      in try (callPackage content) content)
-    else if type == "str" then const expr
-    else expr;
+  lines' = ss: concatStringsSep "\n" ss;
+  toShell = attrs: lines (mapAttrsToList (name: value: "${name}=${value}") attrs);
 }
