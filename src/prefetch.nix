@@ -25,7 +25,7 @@ let
     position = fetcher.origArgPositions.${name}
       or (throw "Cannot get position the position for fetcher argument '${name}', since it does not already exist in the fetcher call.");
     inherit value;
-  });
+  }) args;
 
   json = recursiveUpdate {
     bash_vars = mapAttrs (const toString) {

@@ -351,11 +351,12 @@ print_actual_hash() {
   fi
 
   if [[ $output_type != raw ]]; then
-    if (( diff )) && [[ $expected_hash == "$actual_hash" ]]; then
-      output_jq='del(.'"$hash_algo"')'
-    else
-      (( with_position )) && output_jq='.'"$hash_algo"'.value = "'"$actual_hash"'"' || output_jq='.'"$hash_algo"' = "'"$actual_hash"'"'
-    fi
+    # FIXME: This breaks the use case of nix-update-prefetch, its whole purpose.
+    # if (( diff )) && [[ $expected_hash == "$actual_hash" ]]; then
+    #   output_jq='del(.'"$hash_algo"')'
+    # else
+    # fi
+    (( with_position )) && output_jq='.'"$hash_algo"'.value = "'"$actual_hash"'"' || output_jq='.'"$hash_algo"' = "'"$actual_hash"'"'
     json=$(jq --raw-output '.output | '"$output_jq" <<< "$out")
   elif (( diff )); then
     die "Diff is not supported for raw output."
