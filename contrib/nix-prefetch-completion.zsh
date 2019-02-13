@@ -1,0 +1,78 @@
+#compdef nix-prefetch
+
+# The `nix eval` has a bug causing autocompletion to act buggy when stderr is not redirected to /dev/null,
+# even though there is no output being written to stderr by `nix shell`.
+
+_nix_prefetch_attrs() {
+  local -a attrs
+  # Based on `escapeNixString`:
+  # https://github.com/NixOS/nixpkgs/blob/d4224f05074b6b8b44fd9bd68e12d4f55341b872/lib/strings.nix#L316
+  str=$(jq --null-input --arg str "$1" '$str')
+  str="${str//\$/\\\$}"
+  attrs=( $(nix eval --raw '(
+    let pkgs = import <nixpkgs> { }; in with pkgs.lib;
+    concatMapStrings (s: s + "\n") (filter (hasPrefix '"$str"') (attrNames pkgs))
+  )' 2> /dev/null) )
+  _describe 'attributes' attrs
+}
+
+_nix_prefetch() {
+  local params=( '-f' '--file' '-A' '--attr' '-E' '--expr' '-i' '--index' '-F' '--fetcher' '-t' '--type' '--hash-algo' '-h' '--hash' '--input' '--output' )
+  local flags=( '--fetch-url' '--print-path' '--no-hash' '--force' '--deep' '-l' '--list' '-q' '--quiet' '-v' '--verbose' '-vv' '--debug' '--help' '--version' )
+
+  local prev_word=${words[CURRENT - 1]}
+  local curr_word=${words[CURRENT]}
+
+  if (( CURRENT > 2 && ${params[(i)$prev_word]} <= ${#params} )); then
+    case $prev_word in
+      -f|--file)
+        _files
+        ;;
+      -A|--attr)
+        _nix_prefetch_attrs "$curr_word"
+        ;;
+      -E|--expr|-F|--fetcher)
+        _files
+        _nix_prefetch_attrs "$curr_word"
+        ;;
+      -t|--type|--hash-algo)
+        local values=( 'md5' 'sha1' 'sha256' 'sha512' )
+        _describe 'hash-algos' values
+        ;;
+      --input)
+        local values=( 'nix' 'json' 'shell' )
+        _describe 'input-types' values
+        ;;
+      --output)
+        local values=( 'expr' 'nix' 'json' 'shell' 'raw' )
+        _describe 'output-types' values
+        ;;
+    esac
+    return 0
+  fi
+
+  local given_args
+  if [[ -n $_nix_prefetch_all_args ]]; then
+    for word in "${words[@]}"; do
+      [[ $_nix_prefetch_all_args == *" $word "* ]] && given_args+=" $word"
+    done
+    [[ -n $given_args ]] && given_args+=' '
+  fi
+
+  local all_args
+  if [[ -z $_nix_prefetch_all_args || $given_args != $_nix_prefetch_given_args ]] &&
+    all_args=$(nix-prefetch --silent "${words[@]:1:${#words[@]} - 2}" --autocomplete)
+  then
+    all_args=$(sed 's/^/--/' <<< "$all_args")
+    _nix_prefetch_given_args=$given_args
+    _nix_prefetch_all_args=( $(echo $all_args) )
+  fi
+
+  _files
+  _nix_prefetch_attrs "$curr_word"
+  _describe 'fetcher-arguments' _nix_prefetch_all_args
+  _describe 'params' params
+  _describe 'flags' flags
+}
+
+_nix_prefetch "$@"

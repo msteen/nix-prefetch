@@ -1,12 +1,6 @@
-☐ Cleanup.
-☐ Document the logic behind validating the hash.
+✔ Cleanup. @done (2/13/2019, 3:01:35 AM)
+✔ Document the logic behind validating the hash. @done (2/13/2019, 3:01:39 AM)
 ☐ Undo "deliberately and explicitly ask curl/libcurl to ignore certificate validity".
-☐ Support inherits from an expression (maybe rewrite on-the-fly such that unsafeGetAttrPos can be called on the attrset from which is inherited).
-☐ Support bindings and inherits from function attrset arguments, like abydos.
-☐ Support bindings and inherits for any arbitrary identifier by going all out:
-We could check all files for the hash output literal string (track this with scopedImport).
-We could check functionArgs if they are constructed by a simple function application.
-We could support arbitrary complex expressions in between by checking the output of such expressions
-and seeing if we can find literals that match them at the call site of the output hash.
-We could see if hnix evaluation could be used to try and track the bindings.
-☐ Why does gcc48 not have src, while its file clearly defines it, maybe it could indicate that we need an extra way to look for package sources.
+✔ Allow boolean flags for things like --showURLs and make --no-<flag> false. @done (2/13/2019, 5:11:49 AM)
+☐ Cache the results of --autocomplete.
+☐ Print URLs option.

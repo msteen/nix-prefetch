@@ -43,7 +43,7 @@ issue() {
 }
 
 quote() {
-  grep -q '^[a-zA-Z0-9_]\+$' <<< "$*" && printf '%s' "$*" || printf '%s' "'${*//'/\\'}'"
+  grep -q '^[a-zA-Z0-9_\.-]\+$' <<< "$*" && printf '%s' "$*" || printf '%s' "'${*//'/\\'}'"
 }
 
 unindent() {
@@ -81,14 +81,16 @@ print_nix_eval() {
 
 nix_bool() {
   local x=$*
-  [[ -z $x || $x == 0 ]] && echo false || {
-    [[ $x == 1 ]] && echo true || issue "Cannot convert '$x' to a Nix boolean."
+  [[ -z $x || $x == 0 ]] && printf false || {
+    [[ $x == 1 ]] && printf true || issue "Cannot convert '$x' to a Nix boolean."
   }
 }
 
+# Based on `escapeNixString`:
+# https://github.com/NixOS/nixpkgs/blob/d4224f05074b6b8b44fd9bd68e12d4f55341b872/lib/strings.nix#L316
 nix_str() {
-  local x=$*
-  nix-instantiate --eval --expr '{ str }: str' --argstr str "$x" || issue "Cannot convert '$x' to a Nix string."
+  str=$(jq --null-input --arg str "$*" '$str')
+  printf '%s' "${str//\$/\\\$}"
 }
 
 nix_typed() {
@@ -101,6 +103,21 @@ nix_typed() {
        *) die_help "Unsupported expression type '$type'.";;
   esac
   printf '{ type = "%s"; value = %s; }' "$type" "$value"
+}
+
+capture_err_verbose_out() {
+  if (( verbose )); then
+    # https://unix.stackexchange.com/questions/430161/redirect-stderr-and-stdout-to-different-variables-without-temporary-files/430182#430182
+    {
+      "$@" >&2 2> /dev/fd/3
+      local ret=$?
+      err=$(cat <&3)
+      return $ret
+    } 3<<EOF
+EOF
+  else
+    err=$("$@" 2>&1)
+  fi
 }
 
 handle_silent() {
@@ -149,7 +166,7 @@ Usage:
                [--input <input-type>] [--output <output-type>] [--print-path]
                [--no-hash] [--force] [-s | --silent] [-q | --quiet] [-v | --verbose] [-vv | --debug] ...
                ([-f | --file] <file> | [-A | --attr] <attr> | [-E | --expr] <expr> | <url>) [<hash>]
-               [--] [--<name> ((-f | --file) <file> | (-A | --attr) <attr> | (-E | --expr) <expr> | <str>) | --autocomplete <word> | --help] ...
+               [--] [--<name> ((-f | --file) <file> | (-A | --attr) <attr> | (-E | --expr) <expr> | <str>) | --autocomplete | --help] ...
   nix-prefetch [(-f | --file) <file>] [--deep] [-s | --silent] [-v | --verbose] [-vv | --debug] ... (-l | --list)
   nix-prefetch --help
   nix-prefetch --version
@@ -200,7 +217,7 @@ for arg in "$@"; do
         esac
       done
       handle_silent
-      (( verbose )) && print_bash_vars 'file deep verbose debug'
+      (( verbose )) && print_bash_vars 'file deep silent verbose debug'
       args_nix="{
         nixpkgsPath = ($file);
         deep = $(nix_bool "$deep");
@@ -229,7 +246,7 @@ while (( $# >= 1 )); do
     -h|--hash) param='hash';;
     --input) param='input_type';;
     --output) param='output_type';;
-    --fetch-url|--print-path|--force|--no-hash|--help)
+    --fetch-url|--print-urls|--print-path|--force|--no-hash|--autocomplete|--help)
       var=${arg#--}
       var=${var//-/_}
       declare "${var}=1"
@@ -294,28 +311,36 @@ if [[ -v file && ! -v expr ]]; then
 fi
 
 # The remaining arguments are passed to the fetcher.
-while (( $# >= 2 )) && [[ $1 == --* ]]; do
-  name=$1; name=${name#--*}; shift
-  case $name in
-    autocomplete)
-      (( $# >= 1 )) || die_option_param
-      autocomplete=$1; shift
-      ;;
-    help) help=1;;
+while (( $# >= 1 )) && [[ $1 == --* ]]; do
+  arg=$1; arg=${arg#--*}; shift
+
+  case $arg in
+    autocomplete|help) declare "${arg}=1";;
     *) false;;
   esac && continue
-  type='str'
-  value=$1; shift
-  case $value in
-    -f|--file) type='file';;
-    -A|--attr) type='attr';;
-    -E|--expr) type='expr';;
-    *) false;;
-  esac && {
-    (( $# >= 1 )) || break
+
+  if (( $# == 0 )) || [[ ! $1 =~ ^(-f|--file|-A|--attr|-E|--expr)$ && $1 == --* ]]; then
+    type='expr'
+    case $arg in
+      no-*) value='false'; arg=${arg#no-};;
+         *) value='true';;
+    esac
+  else
+    (( $# >= 1 )) || die_option_param
+    type='str'
     value=$1; shift
-  }
-  fetcher_args[$name]=$(nix_typed "$type" "$value")
+    case $value in
+      -f|--file) type='file';;
+      -A|--attr) type='attr';;
+      -E|--expr) type='expr';;
+      *) false;;
+    esac && {
+      (( $# >= 1 )) || die_option_param
+      value=$1; shift
+    }
+  fi
+
+  fetcher_args[$arg]=$(nix_typed "$type" "$value")
 done
 
 if [[ -n $input_type ]]; then
@@ -333,7 +358,7 @@ if [[ -n $input_type ]]; then
 fi
 
 if (( verbose )); then
-  printf '%s\n' "$(print_bash_vars 'file expr index fetcher hash hash_algo input_type output_type fetch_url print_path force quiet verbose debug skip_hash help' 2>&1)" >&2
+  printf '%s\n' "$(print_bash_vars 'file expr index fetcher fetch_url hash hash_algo input_type output_type print_path no_hash force silent quiet verbose debug autocomplete help' 2>&1)" >&2
   for name in "${!fetcher_args[@]}"; do
     value=${fetcher_args[$name]}
     print_assign "fetcher_args[$name]" "$value"
@@ -369,7 +394,7 @@ fetcher_autocomplete() {
   out=$(nix_call 'fetcherAutocomplete' --raw "(
     with import $lib/fetcher.nix { inherit lib pkgs expr index fetcher; };
     with lib;
-    lines' (filter (hasPrefix $(nix_str "$autocomplete")) (attrNames (import $lib/fetcher-function-args.nix { inherit lib pkgs fetcher; })))
+    lines' (attrNames (import $lib/fetcher-function-args.nix { inherit lib pkgs fetcher; }))
   )") || exit
   [[ -n $out ]] && printf '%s\n' "$out" || exit 1
 }
@@ -407,11 +432,11 @@ hash_from_err() {
 }
 
 hash_builtin() {
-  err=$(nix_eval --raw "(
+  capture_err_verbose_out nix_eval --raw "(
     with import $lib/fetcher.nix { inherit lib pkgs expr index fetcher; };
     with import $lib/prefetcher.nix { inherit lib pkgs pkg fetcher fetcherArgs hashAlgo hash fetchURL; };
     (with prefetcher; fun (args // { ${hash_algo} = probablyWrongHashes.${hash_algo}; })).drvPath
-  )" 2>&1) && issue_no_hash_mismatch || hash_from_err
+  )" && issue_no_hash_mismatch || hash_from_err
 }
 
 hash_generic() {
@@ -431,7 +456,7 @@ hash_generic() {
     done < <(nix-store --query --roots $outputs)
   fi
 
-  err=$(nix-store --quiet --realize "$wrong_drv_path" 2>&1) && issue_no_hash_mismatch || hash_from_err
+  capture_err_verbose_out nix-store --quiet --realize "$wrong_drv_path" && issue_no_hash_mismatch || hash_from_err
 }
 
 prefetch() {
@@ -495,7 +520,7 @@ prefetch() {
 
 if (( help )); then
   fetcher_help
-elif [[ -n $autocomplete ]]; then
+elif (( autocomplete )); then
   fetcher_autocomplete
 else
   prefetch

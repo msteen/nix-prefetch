@@ -43,7 +43,8 @@ stdenv.mkDerivation rec {
       --subst-var-by version '${version}' \
       --replace '01/01/1970' "$date"
 
-    install -D -t $out/etc/bash_completion.d contrib/nix-prefetch-completions.bash
+    install -D contrib/nix-prefetch-completion.bash $out/share/bash-completion/completions/nix-prefetch
+    install -D contrib/nix-prefetch-completion.zsh $out/share/zsh/site-functions/_nix_prefetch
   '';
 
   meta = {
