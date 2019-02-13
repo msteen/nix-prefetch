@@ -49,21 +49,27 @@ _nix_prefetch() {
     return 0
   fi
 
-  local given_args
-  if [[ -n $_nix_prefetch_all_args ]]; then
-    for word in "${COMP_WORDS[@]}"; do
-      [[ $_nix_prefetch_all_args == *" $word "* ]] && given_args+=" $word"
-    done
-    [[ -n $given_args ]] && given_args+=' '
-  fi
+  if (( COMP_CWORD == 1 )); then
+    _nix_prefetch_all_args=
+  else
+    local given_args
+    if [[ -n $_nix_prefetch_all_args ]]; then
+      for word in "${COMP_WORDS[@]}"; do
+        [[ $_nix_prefetch_all_args == *" $word "* ]] && given_args+=" $word"
+      done
+      [[ -n $given_args ]] && given_args+=' '
+    fi
 
-  local all_args
-  if [[ -z $_nix_prefetch_all_args || $given_args != $_nix_prefetch_given_args ]] &&
-    all_args=$(nix-prefetch --silent "${COMP_WORDS[@]:1:${#COMP_WORDS[@]} - 2}" --autocomplete)
-  then
-    all_args=$(sed 's/^/--/' <<< "$all_args")
-    _nix_prefetch_given_args=$given_args
-    _nix_prefetch_all_args=" $(echo $all_args) "
+    local all_args
+    if [[ -z $_nix_prefetch_all_args || $given_args != $_nix_prefetch_given_args ]]; then
+      _nix_prefetch_given_args=$given_args
+      if all_args=$(nix-prefetch --silent "${COMP_WORDS[@]:1:${#COMP_WORDS[@]} - 2}" --autocomplete); then
+        all_args=$(sed 's/^/--/' <<< "$all_args")
+        _nix_prefetch_all_args=" $(echo $all_args) "
+      else
+        _nix_prefetch_all_args=
+      fi
+    fi
   fi
 
   _nix_prefetch_reply "$(compgen -f -- "$curr_word")"

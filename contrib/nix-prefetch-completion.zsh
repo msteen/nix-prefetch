@@ -51,21 +51,27 @@ _nix_prefetch() {
     return 0
   fi
 
-  local given_args
-  if [[ -n $_nix_prefetch_all_args ]]; then
-    for word in "${words[@]}"; do
-      [[ $_nix_prefetch_all_args == *" $word "* ]] && given_args+=" $word"
-    done
-    [[ -n $given_args ]] && given_args+=' '
-  fi
+  if (( CURRENT == 2 )); then
+    _nix_prefetch_all_args=()
+  else
+    local given_args
+    if (( ${#_nix_prefetch_all_args} > 0 )); then
+      for word in "${words[@]}"; do
+        (( ${_nix_prefetch_all_args[(i)$word]} <= ${#_nix_prefetch_all_args} )) && given_args+=" $word"
+      done
+      [[ -n $given_args ]] && given_args+=' '
+    fi
 
-  local all_args
-  if [[ -z $_nix_prefetch_all_args || $given_args != $_nix_prefetch_given_args ]] &&
-    all_args=$(nix-prefetch --silent "${words[@]:1:${#words[@]} - 2}" --autocomplete)
-  then
-    all_args=$(sed 's/^/--/' <<< "$all_args")
-    _nix_prefetch_given_args=$given_args
-    _nix_prefetch_all_args=( $(echo $all_args) )
+    local all_args
+    if (( ${#_nix_prefetch_all_args} == 0 )) || [[ $given_args != $_nix_prefetch_given_args ]]; then
+      _nix_prefetch_given_args=$given_args
+      if all_args=$(nix-prefetch --silent "${words[@]:1:${#words[@]} - 2}" --autocomplete); then
+        all_args=$(sed 's/^/--/' <<< "$all_args")
+        _nix_prefetch_all_args=( $(echo $all_args) )
+      else
+        _nix_prefetch_all_args=()
+      fi
+    fi
   fi
 
   _files
