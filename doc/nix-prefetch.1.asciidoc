@@ -1,0 +1,147 @@
+:man source: nix-prefetch
+:man version: @version@
+:man manual: Command Reference
+
+= nix-prefetch(1)
+
+== Name
+
+nix-prefetch - Prefetch any fetcher function call, e.g. a package source
+
+== Synopsis
+
+[subs="verbatim,quotes"]
+ *nix-prefetch* [(*-f* | *--file*) <file>] [(*-A* | *--attr*) <attr>] [(*-E* | *--expr*) <expr>] [(*-i* | *--index*) <index>]
+              [(*-F* | *--fetcher*) (<file> | <attr>)] [*--fetch-url*]
+              [(*-t* | *--type* | *--hash-algo*) <hash-algo>] [(*-h* | *--hash*) <hash>]
+              [*--input* <input-type>] [*--output* <output-type>] [*--print-path*]
+              [*--no-hash*] [*--force*] [*-s* | *--silent*] [*-q* | *--quiet*] [*-v* | *--verbose*] [*-vv* | *--debug*] ...
+              ([*-f* | *--file*] <file> | [*-A* | *--attr*] <attr> | [*-E* | *--expr*] <expr> | <url>) [<hash>]
+              [*--*] [*--<name>* ((*-f* | *--file*) <file> | (*-A* | *--attr*) <attr> | (*-E* | *--expr*) <expr> | <str>) | *--autocomplete* <word> | *--help*] ...
+ *nix-prefetch* [(*-f* | *--file*) <file>] [*--deep*] [*-s* | *--silent*] [*-v* | *--verbose*] [*-vv* | *--debug*] ... (*-l* | *--list*)
+ *nix-prefetch* *--help*
+ *nix-prefetch* *--version*
+
+== Options
+
+All options can be repeated with the last value taken,
+and can placed both before and after the parameters.
+
+*-f* <file>, *--file* <file>::
+  When either an attribute or expression is given it has to be a path to Nixpkgs,
+  otherwise it can be a file directly pointing to a fetcher function or package derivation.
+
+*-A* <attr>, *--attr* <attr>::
+  An attribute path relative to the _pkgs_ of the imported Nixpkgs.
+
+*-E* <expr>, *--expr* <expr>::
+  A Nix expression with the _pkgs_ of the imported Nixpkgs put into scope,
+  evaluating to either a fetcher function or package derivation.
+
+*-i* <index>, *--index* <index>::
+  Which element of the list of sources should be used when multiple sources are available.
+
+*-F* (<file> | <attr>), *--fetcher* (<file> | <attr>)::
+  When the fetcher of the source cannot be automatically determined,
+  this option can be used to pass it manually instead.
+
+*--fetch-url*::
+  Fetch only the URL. This converts e.g. the fetcher _fetchFromGitHub_ to _fetchurl_ for its URL,
+  and the hash options will be applied to fetchurl instead. The name argument will be copied over.
+
+*-t* <hash-algo>, *--type* <hash-algo>, *--hash-algo* <hash-algo>::
+  What algorithm should be used for the output hash of the resulting derivation.
+  The following algorithms are allowed: 'md5' (deprecated), 'sha1', 'sha256', or 'sha512' [*default*: 'sha256'].
+
+*-h* <hash>, *--hash* <hash>::
+  When the output hash of the resulting derivation is already known,
+  it can be used to check whether it is already exists within the Nix store.
+
+*--input* <input-type>::
+  Specify what type of input should be read from 'stdin', which will be passed as fetcher arguments. The following types are available:
+
+  'nix';;
+    A Nix attribute set.
+
+  'json';;
+    A JSON object.
+
+  'shell';;
+    Lines of name/value pairs separated by an '=' (equals) sign.
+
+*--output* <output-type>::
+  Specify what type of output should be written to 'stdout'. The following types are available:
+
+  'expr';;
+    Output a Nix expression, that once evaluated, will result in an attribute set containing the original fetcher,
+    the new fetcher (i.e. prefetcher), and the referenced pkgs set. Some of this information can only be represented at runtime,
+    so the other output formats would not suffice if this information needed for e.g. intergration with other tools.
+
+  'nix';;
+    The arguments passed to the fetcher function as a Nix attribute set.
+
+  'json';;
+    The arguments passed to the fetcher function as a JSON object.
+
+  'shell';;
+    The arguments passed to the fetcher function as lines of name/value pairs separated by an '=' (equals) sign.
+
+  'raw';;
+    The output hash and, if the *--print-path* option is passed, the output path as well.
+
+*--print-path*::
+  Print the output path of the resulting derivation. Only applicable to *--output* 'raw' (which is the default output type).
+
+*--no-hash*::
+  Skip determining the hash (meant for debugging purposes).
+
+*--force*::
+  Always redetermine the hash, even if the given hash is already determined to be valid.
+
+*-l*, *--list*::
+  List the available fetchers in Nixpkgs.
+
+*--deep*::
+  Rather than only listing the top-level fetchers, deep search Nixpkgs for fetchers (slow).
+
+*-s*, *--silent*::
+  No output to 'stderr'.
+
+*-q*, *--quiet*::
+  No additional output to 'stderr'.
+
+*-v*, *--verbose*::
+  Verbose output to 'stderr'.
+
+*-vv*, *--debug*::
+  Even more verbose output to 'stderr' (meant for debugging purposes).
+
+*--help*::
+  Show help message.
+
+*--version*::
+  Show version information.
+
+== Examples
+
+[subs="verbatim,quotes"]
+  *nix-prefetch* *--list*
+  *nix-prefetch* *--list* *--deep*
+  *nix-prefetch* hello *--help*
+  *nix-prefetch* hello
+  *nix-prefetch* hello *--hash-algo* sha512
+  *nix-prefetch* hello.src
+  *nix-prefetch* \'let name = "hello"; in pkgs.${name}'
+  *nix-prefetch* \'callPackage (pkgs.path + /pkgs/applications/misc/hello) { }'
+  *nix-prefetch* *--file* \'builtins.fetchTarball "channel:nixos-unstable"' hello
+  *nix-prefetch* hello 0000000000000000000000000000000000000000000000000000
+  *nix-prefetch* du-dust.cargoDeps
+  *nix-prefetch* du-dust.cargoDeps *--fetcher* <nixpkgs/pkgs/build-support/rust/fetchcargo.nix>
+  *nix-prefetch* openraPackages.mods.ca *--index* 0 *--rev* master
+  *nix-prefetch* fetchurl *--url* mirror://gnu/hello/hello-2.10.tar.gz
+  *nix-prefetch* ./test-autocall.nix *--url* mirror://gnu/hello/hello-2.10.tar.gz
+  *nix-prefetch* hello *--output* expr
+
+== Author
+
+*Matthijs Steen*

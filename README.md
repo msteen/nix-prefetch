@@ -36,10 +36,6 @@ Planned features
 
 * Try and see how many fetchers can be to not ignore certificate validity checking,
   without having to modify the fetchers themselves, to prevent potential man-in-the-middle (MITM) attacks when prefetching.
-* Improve tracking the origin (i.e. position) of fetcher arguments,
-  like the origin of inherited attributes from an expression (e.g. `inherit (expr) attr;`),
-  to help facilitate tools like https://github.com/msteen/nix-update-fetch.
-* Auto-completion for fetcher arguments (of either fetcher functions or package sources) should be possible with some extra tricks.
 
 Limitations
 ---
@@ -59,13 +55,10 @@ Limitations
   ```
 
   We would not be able to extract that `{ foo = 5; }` was passed to the fetcher.
-  
+
   Using import-from-derivation (IFD) or `builtins.exec` together with a rewriter based on `rnix` like `nix-update-fetch` does,
   we could in theory even handle this case, but it is not worth implementing at the moment,
   considering this is an edge case I have yet to encounter.
-
-* Right now (see Planned features), if a fetcher is based on another fetcher, we will not be able to list all its possible arguments
-  in the fetcher's help message.
 
 Examples
 ---
@@ -224,19 +217,12 @@ They can be found in their own sections instead.
 
 Usage:
   nix-prefetch fetchFromGitHub
-               [ -f <file> | --file <file>
-               | -t <hash-algo> | --type <hash-algo> | --hash-algo <hash-algo>
-               | -h <hash> | --hash <hash>
-               | --fetch-url | --print-path | --force
-               | -q | --quiet | -v | --verbose | -vv | --debug | --skip-hash ]...
-               [hash]
-               [--]
-               ( <fetcher-option>
-                 ( -f <file> | --file <file>
-                 | -A <attr> | --attr <attr>
-                 | -E <expr> | --expr <expr>
-                 | <str> ) )...
-  nix-prefetch [-v | --verbose | -vv | --debug] fetchFromGitHub --help
+               [(-f | --file) <file>] [--fetch-url]
+               [(-t | --type | --hash-algo) <hash-algo>] [(-h | --hash) <hash>]
+               [--input <input-type>] [--output <output-type>] [--print-path]
+               [--no-hash] [--force] [-s | --silent] [-q | --quiet] [-v | --verbose] [-vv | --debug] ...
+               [<hash>]
+               [--] [--<name> ((-f | --file) <file> | (-A | --attr) <attr> | (-E | --expr) <expr> | <str>) | --autocomplete <word> | --help] ...
 
 Fetcher options (required):
   --owner
@@ -244,100 +230,29 @@ Fetcher options (required):
   --rev
 
 Fetcher options (optional):
+  --curlOpts
+  --downloadToTemp
+  --executable
+  --extraPostFetch
   --fetchSubmodules
   --githubBase
+  --md5
+  --meta
   --name
+  --netrcImpureEnvVars
+  --netrcPhase
+  --outputHash
+  --outputHashAlgo
+  --passthru
+  --postFetch
   --private
+  --recursiveHash
+  --sha1
+  --sha256
+  --sha512
+  --showURLs
+  --stripRoot
+  --url
+  --urls
   --varPrefix
-
-Options:
-  -f, --file       When either an attribute or expression is given it has to be a path to Nixpkgs,
-                  otherwise it can be a file directly pointing to a fetcher function or package derivation.
-  -t, --type,
-      --hash-algo  What algorithm should be used for the output hash of the resulting derivation.
-  -h, --hash       When the output hash of the resulting derivation is already known,
-                  it can be used to check whether it is already exists within the Nix store.
-  --fetch-url      Fetch only the URL. This converts e.g. the fetcher fetchFromGitHub to fetchurl for its URL,
-                  and the hash options will be applied to fetchurl instead. The name argument will be copied over.
-  --print-path     Print the output path of the resulting derivation.
-  --force          Always redetermine the hash, even if the given hash is already determined to be valid.
-  -q, --quiet      No additional output.
-  -v, --verbose    Verbose output, so it is easier to determine what is being done.
-  -vv, --debug     Even more verbose output (meant for debugging purposes).
-  --skip-hash      Skip determining the hash (meant for debugging purposes).
-  --help           Show help message.
-```
-
-Help message
----
-
-```
-Prefetch any fetcher function call, e.g. a package source.
-
-All options can be repeated with the last value taken,
-and can placed both before and after the parameters.
-
-Usage:
-  nix-prefetch [ -f <file> | --file <file>
-               | -A <attr> | --attr <attr>
-               | -E <expr> | --expr <expr>
-               | -i <index> | --index <index>
-               | -F (<file> | <attr>) | --fetcher (<file> | <attr>)
-               | -t <hash-algo> | --type <hash-algo> | --hash-algo <hash-algo>
-               | -h <hash> | --hash <hash>
-               | --fetch-url | --print-path | --force
-               | -q | --quiet | -v | --verbose | -vv | --debug | --skip-hash ]...
-               ( -f <file> | --file <file> | <file>
-               | -A <attr> | --attr <attr> | <attr>
-               | -E <expr> | --expr <expr> | <expr>
-               | <url> )
-               [hash]
-               [--]
-               [ --<name>
-                 ( -f <file> | --file <file>
-                 | -A <attr> | --attr <attr>
-                 | -E <expr> | --expr <expr>
-                 | <str> ) ]...
-  nix-prefetch [-f <file> | --file <file> | --deep | -v | --verbose | -vv | --debug]... (-l | --list)
-  nix-prefetch --help
-  nix-prefetch [-v | --verbose | -vv | --debug] (-f <file> | --file <file> | <attr>) --help
-  nix-prefetch --version
-
-Examples:
-  nix-prefetch hello
-  nix-prefetch hello --hash-algo sha512
-  nix-prefetch hello.src
-  nix-prefetch 'let name = "hello"; in pkgs.${name}'
-  nix-prefetch 'callPackage (pkgs.path + /pkgs/applications/misc/hello) { }'
-  nix-prefetch --file '<nixos-unstable>' hello
-  nix-prefetch hello 0000000000000000000000000000000000000000000000000000
-  nix-prefetch du-dust.cargoDeps --fetcher --file '<nixpkgs/pkgs/build-support/rust/fetchcargo.nix>'
-
-Options:
-  -f, --file       When either an attribute or expression is given it has to be a path to Nixpkgs,
-                   otherwise it can be a file directly pointing to a fetcher function or package derivation.
-  -A, --attr       An attribute path relative to the `pkgs` of the imported Nixpkgs.
-  -E, --expr       A Nix expression with the `pkgs` of the imported Nixpkgs put into scope,
-                   evaluating to either a fetcher function or package derivation.
-  -i, --index      Which element of the list of sources should be used when multiple sources are available.
-  -F, --fetcher    When the fetcher of the source cannot be automatically determined,
-                   this option can be used to pass it manually instead.
-  -t, --type,
-      --hash-algo  What algorithm should be used for the output hash of the resulting derivation.
-  -h, --hash       When the output hash of the resulting derivation is already known,
-                   it can be used to check whether it is already exists within the Nix store.
-  --fetch-url      Fetch only the URL. This converts e.g. the fetcher fetchFromGitHub to fetchurl for its URL,
-                   and the hash options will be applied to fetchurl instead. The name argument will be copied over.
-  --print-path     Print the output path of the resulting derivation.
-  --force          Always redetermine the hash, even if the given hash is already determined to be valid.
-  -q, --quiet      No additional output.
-  -v, --verbose    Verbose output, so it is easier to determine what is being done.
-  -vv, --debug     Even more verbose output (meant for debugging purposes).
-  --skip-hash      Skip determining the hash (meant for debugging purposes).
-  --deep           Rather than only listing the top-level fetchers, deep search Nixpkgs for fetchers (slow).
-  -l, --list       List the available fetchers in Nixpkgs.
-  --version        Show version information.
-  --help           Show help message.
-
-Note: This program is EXPERIMENTAL and subject to change.
 ```

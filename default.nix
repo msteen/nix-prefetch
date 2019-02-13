@@ -1,4 +1,6 @@
-{ stdenv, makeWrapper, coreutils, gnugrep, gnused, jq, nix, libShellVar ? "$lib" }:
+{ stdenv, makeWrapper
+, asciidoc, docbook_xml_dtd_45, docbook_xsl, libxml2, libxslt
+, coreutils, gawk, gnugrep, gnused, jq, nix }:
 
 with stdenv.lib;
 
@@ -7,22 +9,41 @@ stdenv.mkDerivation rec {
   pname = "nix-prefetch";
   version = "0.1.0";
 
-  src = ./src;
+  src = ./.;
 
-  nativeBuildInputs = [ makeWrapper ];
+  nativeBuildInputs = [
+    makeWrapper
+    asciidoc docbook_xml_dtd_45 docbook_xsl libxml2 libxslt
+  ];
+
+  configurePhase = ''
+    . configure.sh
+  '';
+
+  buildPhase = ''
+    a2x -f manpage doc/nix-prefetch.1.asciidoc
+  '';
 
   installPhase = ''
     lib=$out/lib/${pname}
-    mkdir -p $out/bin $lib
-    substitute ${pname}.sh $lib/${pname}.sh \
-      --subst-var-by lib ${libShellVar} \
+    mkdir -p $lib
+    substitute lib/main.sh $lib/main.sh \
+      --subst-var-by lib $lib \
       --subst-var-by version '${version}'
-    chmod +x $lib/${pname}.sh
-    patchShebangs $lib/${pname}.sh
-    makeWrapper $lib/${pname}.sh $out/bin/${pname} \
-      --prefix PATH : '${makeBinPath [ coreutils gnugrep gnused jq nix ]}'
-    cp write_file.sh $lib/
-    cp *.nix $lib/
+    chmod +x $lib/main.sh
+    patchShebangs $lib/main.sh
+    cp lib/*.nix $lib/
+
+    mkdir -p $out/bin
+    makeWrapper $lib/main.sh $out/bin/${pname} \
+      --prefix PATH : '${makeBinPath [ coreutils gawk gnugrep gnused jq nix ]}'
+
+    mkdir -p $out/share/man/man1
+    substitute doc/nix-prefetch.1 $out/share/man/man1/nix-prefetch.1 \
+      --subst-var-by version '${version}' \
+      --replace '01/01/1970' "$date"
+
+    install -D -t $out/etc/bash_completion.d contrib/nix-prefetch-completions.bash
   '';
 
   meta = {
