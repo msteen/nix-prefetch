@@ -25,6 +25,6 @@ let
 # since it requires evaluation, we can only validate it within Nix.
 in if builtins.pathExists pkgsTopLevelPath then
   let pkgs = import nixpkgsPath { };
-  in if pkgs ? pkgs && pkgs ? path && pkgs ? lib && pkgs ? config then { inherit prelude; pkgs = if pkgs ? hello_rs then pkgs else pkgs // import ./pkgs-extra.nix { inherit prelude; inherit (pkgs) callPackage; }; }
+  in if pkgs ? pkgs && pkgs ? path && pkgs ? lib && pkgs ? config then { inherit prelude pkgs; }
   else throw "Nixpkgs path did not evaluate to a Nixpkgs attribute set."
 else throw "Could not find Nixpkgs path: ${toString pkgsTopLevelPath}."

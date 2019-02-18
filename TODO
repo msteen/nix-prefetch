@@ -8,4 +8,4 @@
 ✔ If `rev` is a required fetcher argument, provide a default for it by finding its default branch. @done (2/17/2019, 1:00:48 AM)
 ✔ Overloaded builtins don't work with more indirect expressions. @done (2/17/2019, 9:11:32 PM)
 ✔ Print path fails for non-hash builtin fetchers. @done (2/17/2019, 9:03:17 PM)
-☐ The security curlOpts should not show up in the returned fetcher arguments.
+✔ The security curlOpts should not show up in the returned fetcher arguments. @done (2/18/2019, 4:29:05 PM)

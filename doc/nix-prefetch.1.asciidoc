@@ -12,9 +12,9 @@ nix-prefetch - Prefetch any fetcher function call, e.g. package sources
 
 [subs="verbatim,quotes"]
  *nix-prefetch* [(*-A* | *--attr*) <attr>] [(*-E* | *--expr*) <expr>] [(*-i* | *--index*) <index>] [(*-F* | *--fetcher*) (<file> | <attr>)]
-              [(*-f* | *--file*) <file>] [*--fetch-url*]
+              [(*-f* | *--file*) <file>] [*--fetchurl*]
               [(*-t* | *--type* | *--hash-algo*) <hash-algo>] [(*-h* | *--hash*) <hash>]
-              [*--input* <input-type>] [*--output* <output-type>] [*--print-path*]
+              [*--input* <input-type>] [*--output* <output-type>] [*--print-urls*] [*--print-path*]
               [*--no-hash*] [*--force*] [*-s* | *--silent*] [*-q* | *--quiet*] [*-v* | *--verbose*] [*-vv* | *--debug*] ...
               ([*-f* | *--file*] <file> | [*-A* | *--attr*] <attr> | [*-E* | *--expr*] <expr> | <url>) [<hash>]
               [*--*] [*--<name>* ((*-f* | *--file*) <file> | (*-A* | *--attr*) <attr> | (*-E* | *--expr*) <expr> | <str>) | *--autocomplete* | *--help*] ...
@@ -45,7 +45,7 @@ and can placed both before and after the parameters.
   When the fetcher of the source cannot be automatically determined,
   this option can be used to pass it manually instead.
 
-*--fetch-url*::
+*--fetchurl*::
   Fetch only the URL. This converts e.g. the fetcher _fetchFromGitHub_ to _fetchurl_ for its URL,
   and the hash options will be applied to fetchurl instead. The name argument will be copied over.
 
@@ -88,6 +88,9 @@ and can placed both before and after the parameters.
 
   'raw';;
     The output hash and, if the *--print-path* option is passed, the output path as well.
+
+*--print-urls*::
+  Print the URLs fetched as part of the derivation. Only applicable to *--output* 'raw' (which is the default output type).
 
 *--print-path*::
   Print the output path of the resulting derivation. Only applicable to *--output* 'raw' (which is the default output type).

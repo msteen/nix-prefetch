@@ -44,11 +44,8 @@ let
 
   fetcherRevArg = url: { rev = exec [ gitHEAD url ]; };
 
-  secureCurlOpts = { curlOpts = " --no-insecure --cacert ${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt "; };
-  fetcherSecureArg = optionalAttrs (fetcherFunctionArgs ? curlOpts) secureCurlOpts;
-
   prefetcherArgs =
-    let args = removeAttrs fetcher.args hashAlgos // fetcherArgs // fetcherHashArg // fetcherSecureArg;
+    let args = removeAttrs fetcher.args hashAlgos // fetcherArgs // fetcherHashArg;
     in args // optionalAttrs ((!(args ? rev)) && (!(fetcherFunctionArgs.rev or true))) (
       if fetcher.name == "fetchFromGitHub" && args ? owner && args ? repo then fetcherRevArg (fetcher (prefetcherArgs // { fetchSubmodules = true; })).url
       else if args ? url && hasSuffix ".git" args.url then fetcherRevArg args.url
@@ -62,12 +59,15 @@ let
     else [];
 
   prefetcher =
-    if !fetchURL then fetcher // { args = prefetcherArgs; }
-    else if !isBuiltinFetcher then pkgs.fetchurl.__fetcher // { args =
-      if urls != [] then { url = head urls; } // optionalAttr prefetcherArgs "name" // fetcherHashArg // secureCurlOpts
-      else throw "The fetcher ${fetcher.name} does not define any URLs.";
-    }
-    else throw "The fetchURL option does not work with builtin fetchers.";
+    let f =
+      if !fetchURL then fetcher // { args = prefetcherArgs; }
+      else if !isBuiltinFetcher then pkgs.fetchurl.__fetcher // {
+        args =
+          if urls != [] then { url = head urls; } // optionalAttr prefetcherArgs "name" // fetcherHashArg
+          else throw "The fetcher ${fetcher.name} does not define any URLs.";
+      }
+      else throw "The --fetchurl option does not work with builtin fetchers.";
+    in f // { drv = f f.args; };
 
   log = let toPrettyCode = x: let s = toPretty x; in replaceStrings [ "\n" ] [ "\n>   " ] s; in ''
     The ${if pkg != null then "package ${pkg.name} will be fetched" else "fetcher will be called"} as follows:
@@ -76,12 +76,9 @@ let
     ${lines' (mapAttrsToList (name: value: ">   ${name} = ${toPrettyCode value};") prefetcher.args)}
     > }''}
 
-  '' + optionalString (urls != []) ''
-    The following URLs will be fetched as part of the source:
-    ${lines urls}
   '';
 
-  src = prefetcher prefetcher.args;
+  src = prefetcher.drv;
 
   wrongSrc = if src.outputHash != probablyWrongHashes.${hashAlgo}
     then src.overrideAttrs (const { outputHash = probablyWrongHashes.${hashAlgo}; })

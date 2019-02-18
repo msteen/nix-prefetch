@@ -29,7 +29,7 @@ die() {
 # Allow the source to be used directly when developing.
 # To prevent `--subst-var-by lib` from replacing the string literal in the equality check,
 # the string literal for it has been broken up.
-if [[ $lib == '@'lib'@' ]]; then
+if [[ $lib == '@''lib''@' ]]; then
   case $PWD in
     */nix-prefetch/lib) lib=$PWD;;
     */nix-prefetch/src) lib=$(realpath "$PWD/../lib");;
@@ -87,18 +87,13 @@ print_vars() {
 }
 
 print_bash_vars() {
-  printf 'The following Bash variables have been set:\n%s\n\n' "$(print_vars "$1" 2>&1)" >&2
-}
-
-print_nix_eval() {
-  printf 'The following Nix function call will be evaluated:\n%s\n\n' "$({ head -1; unindent "$(cat)"; } <<< "$1 $2" | sed 's/^/> /')" >&2
+  (( debug )) && printf 'The following Bash variables have been set:\n%s\n\n' "$(print_vars "$1" 2>&1)" >&2
 }
 
 nix_bool() {
   local x=$*
-  [[ -z $x || $x == 0 ]] && printf false || {
-    [[ $x == 1 ]] && printf true || issue "Cannot convert '$x' to a Nix boolean."
-  }
+  [[ -z $x || $x == 0 || $x == 1 ]] || issue "Cannot convert '$x' to a Nix boolean."
+  (( x )) && echo true || echo false
 }
 
 # Based on `escapeNixString`:
@@ -120,11 +115,18 @@ nix_typed() {
   printf '{ type = "%s"; value = %s; }' "$type" "$value"
 }
 
-capture_err_verbose_out() {
+capture_err() {
   if (( verbose )); then
     # https://unix.stackexchange.com/questions/430161/redirect-stderr-and-stdout-to-different-variables-without-temporary-files/430182#430182
     {
-      "$@" >&2 2> /dev/fd/3
+      "$@" 2> >(awk '
+        /instead of the expected hash/ || /hash mismatch/ { hash_mismatch=1 }
+        {
+          if (hash_mismatch) { print }
+          else if (printed_stderr || $0 != "") { print > "/dev/stderr"; printed_stderr=1 }
+        }
+        END { if (printed_stderr) { print "" > "/dev/stderr" } }
+      ' > /dev/fd/3)
       local ret=$?
       err=$(cat <&3)
       return $ret
@@ -148,7 +150,7 @@ nix_eval() {
 
 nix_call() {
   local name=$1; shift
-  (( verbose )) && print_nix_eval "$name" "$args_nix"
+  (( debug )) && printf 'The following Nix function call will be evaluated:\n%s\n\n' "$({ head -1; unindent "$(cat)"; } <<< "$name $args_nix" | sed 's/^/> /')" >&2
   nix_eval "$@"
 }
 
@@ -171,8 +173,8 @@ die_arg_count() {
 show_usage() {
   man --pager=cat nix-prefetch | col --no-backspaces --spaces | awk '
     $1 == "SYNOPSIS" { print "Usage:"; between=1; next }
+    between && $1 ~ /^[A-Z]+$/ { exit }
     between == 1 { match($0, /^ */); between=2 }
-    $1 ~ /^[A-Z]+$/ { between=0 }
     between && ! /^[[:space:]]*$/ { print "  " substr($0, RLENGTH + 1) }
   '
 }
@@ -182,13 +184,41 @@ show_help() {
 }
 
 show_version() {
-  echo "$version"
+  printf '%s\n' "$version"
 }
 
 handle_common() {
   [[ -n $file ]] || file='<nixpkgs>'
   (( silent )) && exec 2> /dev/null
   (( debug )) && nix_eval_args+=( --show-trace )
+
+  if ! overlays=$(sed -nE 's/.*nixpkgs-overlays=([^:]*)(:|$).*/\1/p' <<< "$NIX_PATH"); then
+    if   [[ -e $HOME/.config/nixpkgs/overlays.nix ]]; then
+      overlays=$HOME/.config/nixpkgs/overlays.nix
+    elif [[ -e $HOME/.config/nixpkgs/overlays ]]; then
+      overlays=$HOME/.config/nixpkgs/overlays
+    fi
+  fi
+
+  if [[ -z $XDG_RUNTIME_DIR ]]; then
+    XDG_RUNTIME_DIR=/run/user/$(id -u)
+    [[ -d $XDG_RUNTIME_DIR ]] || die "Could not determine the runtime directory (i.e. XDG_RUNTIME_DIR)."
+    export XDG_RUNTIME_DIR
+  fi
+
+  [[ -e $XDG_RUNTIME_DIR/nix-prefetch ]] && rm -r "$XDG_RUNTIME_DIR/nix-prefetch"
+  mkdir "$XDG_RUNTIME_DIR/nix-prefetch"
+
+  nixpkgs_overlays=$XDG_RUNTIME_DIR/nix-prefetch/overlays
+  if [[ -f $overlays ]]; then
+    nixpkgs_overlays+=.nix
+    { cat "$overlays"; echo ' ++ [ ('; cat "$lib/overlay.nix"; echo ') ]'; } > "$nixpkgs_overlays"
+  else
+    mkdir "$nixpkgs_overlays"
+    [[ -n $overlays ]] && ln -s "$overlays/"* "$nixpkgs_overlays/"
+    ln -s "$lib/overlay.nix" "$nixpkgs_overlays/~~~nix-prefetch.nix" # `readDir` uses lexical order, and '~' comes last.
+  fi
+  nix_eval_args+=( -I "nixpkgs-overlays=$nixpkgs_overlays" )
 }
 
 # Each command should be handled differently and to prevent issues like determinig their priorities,
@@ -226,7 +256,7 @@ for arg in "$@"; do
         esac
       done
       handle_common
-      (( verbose )) && print_bash_vars 'file deep silent verbose debug'
+      print_bash_vars 'file deep silent verbose debug'
       args_nix="{
         nixpkgsPath = ($file);
         deep = $(nix_bool "$deep");
@@ -254,7 +284,7 @@ while (( $# >= 1 )); do
     -h|--hash) param='hash';;
     --input) param='input_type';;
     --output) param='output_type';;
-    --fetchurl|--print-urls|--print-path|--print-urls|--force|--no-hash|--autocomplete|--help)
+    --fetchurl|--print-urls|--print-path|--force|--no-hash|--autocomplete|--help)
       var=${arg#--}
       var=${var//-/_}
       declare "${var}=1"
@@ -367,7 +397,7 @@ if [[ -n $input_type ]]; then
   done < <(unquote_nul "$quoted_input")
 fi
 
-if (( verbose )); then
+if (( debug )); then
   printf '%s\n' "$(print_bash_vars 'file expr index fetcher fetchurl hash hash_algo input_type output_type print_path print_urls no_hash force silent quiet verbose debug autocomplete help' 2>&1)" >&2
   for name in "${!fetcher_args[@]}"; do
     value=${fetcher_args[$name]}
@@ -379,8 +409,14 @@ fi
 (( $# == 0 )) || die_help "Finished parsing the command line arguments, yet still found the following arguments remaining:$( for arg in "$@"; do printf ' %s' "$(quote "$arg")"; done )."
 [[ -v expr_type ]] || die_help "At least a file, attribute, expression, or URL should have been given."
 
-(( print_path )) && [[ $output_type != raw ]] && die "The print path option only works with the default raw output."
-(( print_urls )) && [[ $output_type != raw ]] && die "The print URLs option only works with the default raw output."
+die_no_raw_output() {
+  die "The $1 option only works with the default raw output."
+}
+
+if [[ $output_type != raw ]]; then
+  (( print_path )) && die_no_raw_output '--print-path'
+  (( print_urls )) && die_no_raw_output '--print-urls'
+fi
 
 expr=$(nix_typed "$expr_type" "$expr")
 
@@ -395,49 +431,22 @@ fetcher_args_nix+='}'
 args_nix="{
   nixpkgsPath = ($file);
   expr = $expr;
-  index = $( [[ -v index ]] && echo "$index" || echo null );
-  fetcher = $( [[ -v fetcher ]] && echo "$fetcher" || echo null );
+  index = $( [[ -v index ]] && printf '%s\n' "$index" || echo null );
+  fetcher = $( [[ -v fetcher ]] && printf '%s\n' "$fetcher" || echo null );
   fetcherArgs = $fetcher_args_nix;
   hashAlgo = $( [[ -v hash_algo ]] && nix_str "$hash_algo" || echo null );
   hash = $( [[ -v hash ]] && nix_str "$hash" || echo null );
   fetchURL = $(nix_bool "$fetchurl");
 }"
 
-if ! overlays=$(sed -nE 's/.*nixpkgs-overlays=([^:]*)(:|$).*/\1/p' <<< "$NIX_PATH"); then
-  if   [[ -e $HOME/.config/nixpkgs/overlays.nix ]]; then
-    overlays=$HOME/.config/nixpkgs/overlays.nix
-  elif [[ -e $HOME/.config/nixpkgs/overlays ]]; then
-    overlays=$HOME/.config/nixpkgs/overlays
-  fi
-fi
-
-[[ -e $XDG_RUNTIME_DIR/nix-prefetch ]] && rm -r $XDG_RUNTIME_DIR/nix-prefetch
-mkdir "$XDG_RUNTIME_DIR/nix-prefetch"
-
-printf '%s\n' "$( [[ -v fetcher ]] && echo "$fetcher" || echo null )" > $XDG_RUNTIME_DIR/nix-prefetch/fetcher.nix
-
-nixpkgs_overlays=$XDG_RUNTIME_DIR/nix-prefetch/overlays
-if [[ -n $overlays ]]; then
-  if [[ -f $overlays ]]; then
-    nixpkgs_overlays+=.nix
-    { cat "$overlays"; echo ' ++ [ ('; cat "$lib/fetcher-overlay.nix"; echo ') ]'; } > "$nixpkgs_overlays"
-  else
-    mkdir "$nixpkgs_overlays"
-    ln -s "$overlays/"* "$nixpkgs_overlays/"
-    ln -s "$lib/fetcher-overlay.nix" "$nixpkgs_overlays/nix-prefetch.nix"
-  fi
-else
-  mkdir "$nixpkgs_overlays"
-  ln -s "$lib/fetcher-overlay.nix" "$nixpkgs_overlays/nix-prefetch.nix"
-fi
-nix_eval_args+=( -I "nixpkgs-overlays=$nixpkgs_overlays" )
+printf '%s\n' "$( [[ -v fetcher ]] && printf '%s\n' "$fetcher" || echo null )" > "$XDG_RUNTIME_DIR/nix-prefetch/fetcher.nix"
 
 fetcher_autocomplete() {
-  out=$(nix_call 'fetcherAutocomplete' --raw "(
+  out=$(nix_call 'fetcherAutocomplete' --raw '(
     with prelude;
-    with import $lib/fetcher.nix { inherit prelude pkgs expr index fetcher; };
-    lines' (attrNames (functionArgs fetcher))
-  )") || exit
+    with import '"$lib"'/fetcher.nix { inherit prelude pkgs expr index fetcher; };
+    concatMapStrings (arg: "--${arg}\n") (attrNames (functionArgs fetcher))
+  )') || exit
   [[ -n $out ]] && printf '%s\n' "$out" || exit 1
 }
 
@@ -445,7 +454,7 @@ fetcher_help() {
   usage=$(man --pager=cat nix-prefetch | col --no-backspaces --spaces | awk '
     $1 == "SYNOPSIS" { between=1; next }
     between == 1 { match($0, /^ */); between=2; next }
-    $1 == "nix-prefetch" { between=0 }
+    between && $1 == "nix-prefetch" { exit }
     between { print "  " substr($0, RLENGTH + 1) }
   ')
   nix_call 'fetcherHelp' --raw "(
@@ -455,7 +464,7 @@ fetcher_help() {
 }
 
 die_require_file() {
-  read -r url name < <(jq --raw-output '.output | [.url, .name] | @tsv' <<< "$out")
+  read -r url name < <(jq --raw-output '.fetcher_args | [.url, .name] | @tsv' <<< "$out")
   cat <<EOF >&2
 Unfortunately the file $output cannot be downloaded automatically.
 Please go to $url to download the file and add it to the Nix store like so:
@@ -469,8 +478,7 @@ issue_no_hash_mismatch() {
 }
 
 hash_from_err() {
-  # The hash mismatch error message has changed in version 2.2 of Nix,
-  # swapping the order of the reported hashes.
+  # The hash mismatch error message has changed in version 2.2 of Nix, swapping the order of the reported hashes.
   # https://github.com/NixOS/nix/commit/5e6fa9092fb5be722f3568c687524416bc746423
   if ! actual_hash=$(grep --only-matching "[a-z0-9]\{${actual_hash_size}\}" <<< "$err" > >( [[ $err == *'instead of the expected hash'* ]] && head -1 || tail -1 )); then
     (( debug )) && [[ -n $out ]] && printf '%s\n' "$out" >&2
@@ -479,11 +487,22 @@ hash_from_err() {
   fi
 }
 
+hash_nix_prefetch_url() {
+  local args=()
+  (( print_path )) && args+=( --print-path )
+  [[ $fetcher =~ ^(builtins.fetchTarball|fetchTarball)$ ]] && args+=( --unpack )
+  read -r url name < <(jq --raw-output '.fetcher_args | [.url, .name // empty] | @tsv' <<< "$out")
+  [[ -n $name ]] && args+=( --name "$name" )
+  args+=( "$url" )
+  (( check_hash )) && args+=( "$expected_hash" )
+  IFS=$'\n' read -r -d '' actual_hash output < <(nix-prefetch-url --type "$hash_algo" "${args[@]}")
+}
+
 hash_builtin() {
-  capture_err_verbose_out nix_eval --raw "(
+  capture_err nix_eval --raw "(
     with import $lib/fetcher.nix { inherit prelude pkgs expr index fetcher; };
     with import $lib/prefetcher.nix { inherit prelude pkgs pkg fetcher fetcherArgs hashAlgo hash fetchURL; };
-    prefetcher prefetcher.args
+    prefetcher.drv
   )" && issue_no_hash_mismatch || hash_from_err
 }
 
@@ -503,7 +522,7 @@ hash_generic() {
       fi
     done < <(nix-store --query --roots $outputs)
   fi
-  capture_err_verbose_out nix-store --quiet --realize "$wrong_drv_path" && issue_no_hash_mismatch || hash_from_err
+  capture_err nix-store --quiet --realize "$wrong_drv_path" && issue_no_hash_mismatch || hash_from_err
 }
 
 prefetch() {
@@ -514,21 +533,26 @@ prefetch() {
   )" --option allow-unsafe-native-code-during-evaluation true) || exit
 
   if ! vars=$(jq --raw-output '.bash_vars | to_entries | .[] | .key + "=" + .value' <<< "$out"); then
-    [[ -n $out ]] && echo "$out" >&2
+    [[ -n $out ]] && printf '%s\n' "$out" >&2
     issue "The Nix code was unable to produce valid JSON."
   fi
   while IFS= read -r var; do declare "$var"; done <<< "$vars"
-  (( verbose )) && print_bash_vars "$(jq --raw-output '.bash_vars | keys | join(" ")' <<< "$out")"
+  print_bash_vars "$(jq --raw-output '.bash_vars | keys | join(" ")' <<< "$out")"
 
   [[ $fetcher != requireFile ]] || die_require_file
+  (( ! hash_support && ! no_hash )) && die "The fetcher '$fetcher' does not support hashes, use the --no-hash option to ignore hashes."
+
+  [[ $fetcher =~ ^(fetchurlBoot|builtins.fetchurl|builtins.fetchTarball|fetchTarball)$ ]] && use_nix_prefetch_url=1
 
   log=$(jq --raw-output '.log' <<< "$out")
-  (( ! quiet )) && [[ -n $log ]] && echo "$log" >&2 && echo >&2
+  (( ! quiet )) && [[ -n $log ]] && printf '%s\n\n' "$log" >&2
 
-  (( ! hash_support && ! no_hash )) && die "The fetcher '$fetcher' does not support hashes, use the `--no-hash` option to ignore hashes."
+  (( verbose )) && printf 'The following URLs will be fetched as part of the source:\n%s\n\n' "$(jq --raw-output '.urls[]' <<< "$out")" >&2
 
   if (( no_hash )); then
     actual_hash=$expected_hash
+  elif (( use_nix_prefetch_url )); then
+    hash_nix_prefetch_url
   elif [[ $fetcher == builtins.* ]]; then
     hash_builtin
   else
@@ -549,25 +573,23 @@ prefetch() {
   { inherit pkgs fetcher prefetcher; }
 )";;
     nix) nix-instantiate --eval --strict --expr '{ json }: builtins.fromJSON json' --argstr json "$json";;
-    json) echo "$json";;
+    json) printf '%s\n' "$json";;
     shell) jq --join-output 'to_entries | .[] | .key + "=" + .value + "\u0000"' <<< "$json";;
-    raw) echo "$actual_hash";;
+    raw) printf '%s\n' "$actual_hash";;
   esac
 
   if (( print_path )); then
-    if [[ $fetcher == builtins.* ]]; then
+    if [[ $fetcher == builtins.* ]] && (( ! use_nix_prefetch_url )); then
       output=$(nix_eval --raw "(
         with import $lib/fetcher.nix { inherit prelude pkgs expr index fetcher; };
         with import $lib/prefetcher.nix { inherit prelude pkgs pkg fetcher fetcherArgs hashAlgo hash fetchURL; };
-        prefetcher (prefetcher.args $( (( hash_support )) && echo "// { ${hash_algo} = \"${actual_hash}\"; }" ))
+        prefetcher.drv
       )") || exit
     fi
-    echo "$output"
+    printf '%s\n' "$output"
   fi
 
-  (( print_urls )) && jq --raw-output '.urls[]' <<< "$out"
-
-  return 0
+  (( print_urls )) && jq --raw-output '.urls[]' <<< "$out" || true
 }
 
 if (( help )); then

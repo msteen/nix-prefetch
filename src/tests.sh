@@ -75,7 +75,7 @@ nix-prefetch() {
   # Allow the source to be used directly when developing.
   # To prevent `--subst-var-by bin` from replacing the string literal in the equality check,
   # the string literal for it has been broken up.
-  if [[ $bin == '@'bin'@' ]]; then
+  if [[ $bin == '@''bin''@' ]]; then
     case $PWD in
       */nix-prefetch/src) ./main.sh "$@";;
       */nix-prefetch/lib) ../src/main.sh "$@";;

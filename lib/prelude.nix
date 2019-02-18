@@ -1,6 +1,10 @@
-let origFetcher = import "${builtins.getEnv "XDG_RUNTIME_DIR"}/nix-prefetch/fetcher.nix"; in
+let
+  fetcherPath = "${builtins.getEnv "XDG_RUNTIME_DIR"}/nix-prefetch/fetcher.nix";
+  fetcherDefined = builtins.pathExists fetcherPath;
+  origFetcher = if fetcherDefined then import fetcherPath else null;
 
-let prelude = with prelude; import ./lib.nix // {
+in let prelude = with prelude; import ./lib.nix // {
+  inherit fetcherDefined;
   fetcher = if origFetcher == null || elem origFetcher.type [ "file" "attr" ]
     then origFetcher
     else throw "Unsupported fetcher type '${type}'.";
@@ -73,6 +77,8 @@ let prelude = with prelude; import ./lib.nix // {
       });
     in zipAttrsWith (name: values: head values) (map genFetcher names);
 
+  primitiveFetchers = map (name: "builtins.${name}") (filter isFetcher (attrNames builtins)) ++ [ "fetchurlBoot" ];
+
   markFetcher = { type, name, fetcher }:
     let
       customFetcher = args: markFetcherDrv { inherit type name fetcher args; drv = fetcher args; };
@@ -83,20 +89,25 @@ let prelude = with prelude; import ./lib.nix // {
       requiredFetcherArgs = mapAttrs (_: _: "") (filterAttrs (_: isOptional: !isOptional) (functionArgs fetcher));
 
     in setFunctionArgs customFetcher (functionArgs fetcher) // {
-      __fetcher = (if hasPrefix "builtins." name then fetcher else setFunctionArgs fetcher (functionArgs (customFetcher requiredFetcherArgs).__fetcher))
+      __fetcher = (if !(elem name primitiveFetchers) then setFunctionArgs fetcher (functionArgs (customFetcher requiredFetcherArgs).__fetcher) else fetcher)
         // { inherit type name; args = {}; };
     };
 
-  markFetcherDrv = { type, name, fetcher, args, drv ? fetcher args }: (drv.overrideAttrs or (const drv)) (origAttrs:
+
+  markFetcherDrv = { type, name, fetcher, args, drv ? fetcher args }: let drvOverriden = (drv.overrideAttrs or (const drv)) (origAttrs:
     let
       origPassthru = origAttrs.passthru or {};
-      oldArgs = if origPassthru ? __fetcher then functionArgs origPassthru.__fetcher else {};
+      oldArgs =
+        if origPassthru ? __fetcher then
+          if !(elem origPassthru.__fetcher.name primitiveFetchers) then functionArgs origPassthru.__fetcher
+          else throw "Fetcher ${name} is build on top of the primitive fetcher ${origPassthru.__fetcher.name}, which is not supported."
+        else {};
       newArgs = oldArgs // functionArgs fetcher // mapAttrs (_: _: true) (builtins.intersectAttrs args oldArgs);
     in {
       passthru = origPassthru // {
-        __fetcher = setFunctionArgs fetcher newArgs // { inherit type name args; };
+        __fetcher = setFunctionArgs fetcher newArgs // { inherit type name args; drv = drvOverriden; };
       };
-    });
+    }); in drvOverriden;
 
   # The error "called without required argument" cannot be handled by `tryEval`,
   # so we need to make sure that `callPackage` will succeed before calling it.
