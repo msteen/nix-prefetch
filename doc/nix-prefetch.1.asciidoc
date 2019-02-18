@@ -6,13 +6,13 @@
 
 == Name
 
-nix-prefetch - Prefetch any fetcher function call, e.g. a package source
+nix-prefetch - Prefetch any fetcher function call, e.g. package sources
 
 == Synopsis
 
 [subs="verbatim,quotes"]
- *nix-prefetch* [(*-f* | *--file*) <file>] [(*-A* | *--attr*) <attr>] [(*-E* | *--expr*) <expr>] [(*-i* | *--index*) <index>]
-              [(*-F* | *--fetcher*) (<file> | <attr>)] [*--fetch-url*]
+ *nix-prefetch* [(*-A* | *--attr*) <attr>] [(*-E* | *--expr*) <expr>] [(*-i* | *--index*) <index>] [(*-F* | *--fetcher*) (<file> | <attr>)]
+              [(*-f* | *--file*) <file>] [*--fetch-url*]
               [(*-t* | *--type* | *--hash-algo*) <hash-algo>] [(*-h* | *--hash*) <hash>]
               [*--input* <input-type>] [*--output* <output-type>] [*--print-path*]
               [*--no-hash*] [*--force*] [*-s* | *--silent*] [*-q* | *--quiet*] [*-v* | *--verbose*] [*-vv* | *--debug*] ...
@@ -97,6 +97,9 @@ and can placed both before and after the parameters.
 
 *--force*::
   Always redetermine the hash, even if the given hash is already determined to be valid.
+
+*--autocomplete*::
+  List the arguments that can be passed to the fetcher function.
 
 *-l*, *--list*::
   List the available fetchers in Nixpkgs.

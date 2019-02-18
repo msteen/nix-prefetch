@@ -27,7 +27,7 @@ stdenv.mkDerivation rec {
   installPhase = ''
     lib=$out/lib/${pname}
     mkdir -p $lib
-    substitute lib/main.sh $lib/main.sh \
+    substitute src/main.sh $lib/main.sh \
       --subst-var-by lib $lib \
       --subst-var-by version '${version}'
     chmod +x $lib/main.sh
@@ -37,6 +37,11 @@ stdenv.mkDerivation rec {
     mkdir -p $out/bin
     makeWrapper $lib/main.sh $out/bin/${pname} \
       --prefix PATH : '${makeBinPath [ coreutils gawk gnugrep gnused jq nix ]}'
+
+    substitute src/tests.sh $lib/tests.sh \
+      --subst-var-by bin $out/bin
+    chmod +x $lib/tests.sh
+    patchShebangs $lib/tests.sh
 
     mkdir -p $out/share/man/man1
     substitute doc/nix-prefetch.1 $out/share/man/man1/nix-prefetch.1 \

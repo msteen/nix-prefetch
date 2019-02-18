@@ -4,13 +4,7 @@
 ## Configuration
 ## ##
 
-case $(realpath .) in
-  /nix/store/*) lib='@lib@';;
-  */nix-prefetch/lib) lib='.';;
-  */nix-prefetch) lib='./lib';;
-  *) lib='@lib@';;
-esac
-
+lib='@lib@'
 version='@version@'
 
 ## ##
@@ -32,8 +26,20 @@ die() {
   exit_script 1
 }
 
+# Allow the source to be used directly when developing.
+# To prevent `--subst-var-by lib` from replacing the string literal in the equality check,
+# the string literal for it has been broken up.
+if [[ $lib == '@'lib'@' ]]; then
+  case $PWD in
+    */nix-prefetch/lib) lib=$PWD;;
+    */nix-prefetch/src) lib=$(realpath "$PWD/../lib");;
+    */nix-prefetch) lib=$PWD/lib;;
+    *) die "The script backing nix-prefetch called from an unsupported location: $PWD."
+  esac
+fi
+
 die_help() {
-  (( ! quiet )) && show_usage && printf '\n' >&2
+  (( ! quiet )) && { show_usage; printf '\n'; } >&2
   die "$@"
 }
 
@@ -44,6 +50,15 @@ issue() {
 
 quote() {
   grep -q '^[a-zA-Z0-9_\.-]\+$' <<< "$*" && printf '%s' "$*" || printf '%s' "'${*//'/\\'}'"
+}
+
+# https://stackoverflow.com/questions/6570531/assign-string-containing-null-character-0-to-a-variable-in-bash
+quote_nul() {
+  sed 's/\\/\\\\/g;s/\x0/\\0/g'
+}
+
+unquote_nul() {
+  echo -en "$1"
 }
 
 unindent() {
@@ -97,8 +112,8 @@ nix_typed() {
   local type=$1 raw=$2
   case $type in
     file) value="($raw)";;
-    attr) value="pkgs: with pkgs; ($raw); name = $(nix_str "$raw")";;
-    expr) value="pkgs: with pkgs; ($raw)";;
+    attr) value="pkgs: with pkgs; let inherit (pkgs) builtins; in ($raw); name = $(nix_str "$raw")";;
+    expr) value="pkgs: with pkgs; let inherit (pkgs) builtins; in ($raw)";;
      str) value=$(nix_str "$raw");;
        *) die_help "Unsupported expression type '$type'.";;
   esac
@@ -120,25 +135,21 @@ EOF
   fi
 }
 
-handle_silent() {
-  (( silent )) && exec 2> /dev/null
-}
-
-show_trace() {
-  (( debug )) && echo --show-trace
-}
-
+nix_eval_args=()
 nix_eval() {
-  nix eval "$1" "(
+  local output_type=$1; shift
+  local nix=$1; shift
+  nix eval "$output_type" "(
     with $args_nix;
-    with import $lib/pkgs.nix { inherit nixpkgsPath; };
-    $2
-  )" $(show_trace)
+    with import $lib/pkgs.nix nixpkgsPath;
+    $nix
+  )" "${nix_eval_args[@]}" "$@"
 }
 
 nix_call() {
-  (( verbose )) && print_nix_eval "$1" "$args_nix"
-  nix_eval "$2" "$3"
+  local name=$1; shift
+  (( verbose )) && print_nix_eval "$name" "$args_nix"
+  nix_eval "$@"
 }
 
 ## ##
@@ -158,19 +169,12 @@ die_arg_count() {
 }
 
 show_usage() {
-  cat <<'EOF' >&2
-Usage:
-  nix-prefetch [(-f | --file) <file>] [(-A | --attr) <attr>] [(-E | --expr) <expr>] [(-i | --index) <index>]
-               [(-F | --fetcher) (<file> | <attr>)] [--fetch-url]
-               [(-t | --type | --hash-algo) <hash-algo>] [(-h | --hash) <hash>]
-               [--input <input-type>] [--output <output-type>] [--print-path]
-               [--no-hash] [--force] [-s | --silent] [-q | --quiet] [-v | --verbose] [-vv | --debug] ...
-               ([-f | --file] <file> | [-A | --attr] <attr> | [-E | --expr] <expr> | <url>) [<hash>]
-               [--] [--<name> ((-f | --file) <file> | (-A | --attr) <attr> | (-E | --expr) <expr> | <str>) | --autocomplete | --help] ...
-  nix-prefetch [(-f | --file) <file>] [--deep] [-s | --silent] [-v | --verbose] [-vv | --debug] ... (-l | --list)
-  nix-prefetch --help
-  nix-prefetch --version
-EOF
+  man --pager=cat nix-prefetch | col --no-backspaces --spaces | awk '
+    $1 == "SYNOPSIS" { print "Usage:"; between=1; next }
+    between == 1 { match($0, /^ */); between=2 }
+    $1 ~ /^[A-Z]+$/ { between=0 }
+    between && ! /^[[:space:]]*$/ { print "  " substr($0, RLENGTH + 1) }
+  '
 }
 
 show_help() {
@@ -179,6 +183,12 @@ show_help() {
 
 show_version() {
   echo "$version"
+}
+
+handle_common() {
+  [[ -n $file ]] || file='<nixpkgs>'
+  (( silent )) && exec 2> /dev/null
+  (( debug )) && nix_eval_args+=( --show-trace )
 }
 
 # Each command should be handled differently and to prevent issues like determinig their priorities,
@@ -201,7 +211,6 @@ esac
 for arg in "$@"; do
   case $arg in
     -l|--list)
-      file='<nixpkgs>'
       while (( $# >= 1 )); do
         arg=$1; shift
         case $arg in
@@ -216,22 +225,21 @@ for arg in "$@"; do
           *) [[ $arg =~ ^(-l|--list)$ ]] || die_extra_param "$arg";;
         esac
       done
-      handle_silent
+      handle_common
       (( verbose )) && print_bash_vars 'file deep silent verbose debug'
       args_nix="{
         nixpkgsPath = ($file);
         deep = $(nix_bool "$deep");
       }"
       nix_call 'listFetchers' --raw "(
-        with lib;
-        lines (import $lib/list-fetchers.nix { inherit lib pkgs deep; })
+        with prelude;
+        lines (import $lib/list-fetchers.nix { inherit prelude pkgs deep; })
       )"
       exit
     ;;
   esac
 done
 
-file='<nixpkgs>'
 output_type=raw
 while (( $# >= 1 )); do
   arg=$1; shift
@@ -246,7 +254,7 @@ while (( $# >= 1 )); do
     -h|--hash) param='hash';;
     --input) param='input_type';;
     --output) param='output_type';;
-    --fetch-url|--print-urls|--print-path|--force|--no-hash|--autocomplete|--help)
+    --fetchurl|--print-urls|--print-path|--print-urls|--force|--no-hash|--autocomplete|--help)
       var=${arg#--}
       var=${var//-/_}
       declare "${var}=1"
@@ -286,10 +294,10 @@ while (( $# >= 1 )); do
   fi
 done
 
-handle_silent
+handle_common
 
 if [[ -v fetcher ]]; then
-  [[ $fetcher == */* && -e $fetcher || $fetcher == '<'* ]] && type='file' || type='str'
+  [[ $fetcher == */* && -e $fetcher || $fetcher == '<'* ]] && type='file' || type='attr'
   fetcher=$(nix_typed "$type" "$fetcher")
 fi
 
@@ -344,21 +352,23 @@ while (( $# >= 1 )) && [[ $1 == --* ]]; do
 done
 
 if [[ -n $input_type ]]; then
-  input=$(< /dev/stdin)
+  [[ $input_type == raw ]] && quoted_input=$(quote_nul < /dev/stdin) || input=$(< /dev/stdin)
   if [[ $input_type == nix ]]; then
-    input=$(nix-instantiate --eval --strict --expr "{ args }: with import $lib/lib.nix; toShell args" --arg args "$input" $(show_trace) | jq --raw-output '.') || exit
-  elif [[ $input_type == json ]]; then
-    input=$(jq --raw-output 'to_entries | .[] | .key + "=" + .value' <<< "$input") || exit
+    input=$(nix-instantiate --eval --strict --expr '{ input }: builtins.toJSON input' --arg input "$input" "${nix_eval_args[@]}") || exit
+    input=$(jq 'fromjson' <<< "$input") || exit
   fi
-  while IFS= read -r line; do
+  if [[ $input_type =~ ^(json|nix)$ ]]; then
+    quoted_input=$(jq --join-output 'to_entries | .[] | .key + "=" + .value + "\u0000"' <<< "$input" | quote_nul) || exit
+  fi
+  while IFS= read -r -d '' line; do
     [[ $line == *'='* ]] || die "Expected a name value pair seperated by an equal sign, yet got input line '$line'."
     IFS='=' read -r name value <<< "$line"
-    fetcher_args[$name]=$(nix_expr 'str' "$value")
-  done <<< "$input"
+    fetcher_args[$name]=$(nix_typed 'str' "$value")
+  done < <(unquote_nul "$quoted_input")
 fi
 
 if (( verbose )); then
-  printf '%s\n' "$(print_bash_vars 'file expr index fetcher fetch_url hash hash_algo input_type output_type print_path no_hash force silent quiet verbose debug autocomplete help' 2>&1)" >&2
+  printf '%s\n' "$(print_bash_vars 'file expr index fetcher fetchurl hash hash_algo input_type output_type print_path print_urls no_hash force silent quiet verbose debug autocomplete help' 2>&1)" >&2
   for name in "${!fetcher_args[@]}"; do
     value=${fetcher_args[$name]}
     print_assign "fetcher_args[$name]" "$value"
@@ -368,6 +378,9 @@ fi
 
 (( $# == 0 )) || die_help "Finished parsing the command line arguments, yet still found the following arguments remaining:$( for arg in "$@"; do printf ' %s' "$(quote "$arg")"; done )."
 [[ -v expr_type ]] || die_help "At least a file, attribute, expression, or URL should have been given."
+
+(( print_path )) && [[ $output_type != raw ]] && die "The print path option only works with the default raw output."
+(( print_urls )) && [[ $output_type != raw ]] && die "The print URLs option only works with the default raw output."
 
 expr=$(nix_typed "$expr_type" "$expr")
 
@@ -387,22 +400,57 @@ args_nix="{
   fetcherArgs = $fetcher_args_nix;
   hashAlgo = $( [[ -v hash_algo ]] && nix_str "$hash_algo" || echo null );
   hash = $( [[ -v hash ]] && nix_str "$hash" || echo null );
-  fetchURL = $(nix_bool "$fetch_url");
+  fetchURL = $(nix_bool "$fetchurl");
 }"
+
+if ! overlays=$(sed -nE 's/.*nixpkgs-overlays=([^:]*)(:|$).*/\1/p' <<< "$NIX_PATH"); then
+  if   [[ -e $HOME/.config/nixpkgs/overlays.nix ]]; then
+    overlays=$HOME/.config/nixpkgs/overlays.nix
+  elif [[ -e $HOME/.config/nixpkgs/overlays ]]; then
+    overlays=$HOME/.config/nixpkgs/overlays
+  fi
+fi
+
+[[ -e $XDG_RUNTIME_DIR/nix-prefetch ]] && rm -r $XDG_RUNTIME_DIR/nix-prefetch
+mkdir "$XDG_RUNTIME_DIR/nix-prefetch"
+
+printf '%s\n' "$( [[ -v fetcher ]] && echo "$fetcher" || echo null )" > $XDG_RUNTIME_DIR/nix-prefetch/fetcher.nix
+
+nixpkgs_overlays=$XDG_RUNTIME_DIR/nix-prefetch/overlays
+if [[ -n $overlays ]]; then
+  if [[ -f $overlays ]]; then
+    nixpkgs_overlays+=.nix
+    { cat "$overlays"; echo ' ++ [ ('; cat "$lib/fetcher-overlay.nix"; echo ') ]'; } > "$nixpkgs_overlays"
+  else
+    mkdir "$nixpkgs_overlays"
+    ln -s "$overlays/"* "$nixpkgs_overlays/"
+    ln -s "$lib/fetcher-overlay.nix" "$nixpkgs_overlays/nix-prefetch.nix"
+  fi
+else
+  mkdir "$nixpkgs_overlays"
+  ln -s "$lib/fetcher-overlay.nix" "$nixpkgs_overlays/nix-prefetch.nix"
+fi
+nix_eval_args+=( -I "nixpkgs-overlays=$nixpkgs_overlays" )
 
 fetcher_autocomplete() {
   out=$(nix_call 'fetcherAutocomplete' --raw "(
-    with import $lib/fetcher.nix { inherit lib pkgs expr index fetcher; };
-    with lib;
-    lines' (attrNames (import $lib/fetcher-function-args.nix { inherit lib pkgs fetcher; }))
+    with prelude;
+    with import $lib/fetcher.nix { inherit prelude pkgs expr index fetcher; };
+    lines' (attrNames (functionArgs fetcher))
   )") || exit
   [[ -n $out ]] && printf '%s\n' "$out" || exit 1
 }
 
 fetcher_help() {
+  usage=$(man --pager=cat nix-prefetch | col --no-backspaces --spaces | awk '
+    $1 == "SYNOPSIS" { between=1; next }
+    between == 1 { match($0, /^ */); between=2; next }
+    $1 == "nix-prefetch" { between=0 }
+    between { print "  " substr($0, RLENGTH + 1) }
+  ')
   nix_call 'fetcherHelp' --raw "(
-    with import $lib/fetcher.nix { inherit lib pkgs expr index fetcher; };
-    import $lib/fetcher-help.nix { inherit lib pkgs pkg fetcher; }
+    with import $lib/fetcher.nix { inherit prelude pkgs expr index fetcher; };
+    import $lib/fetcher-help.nix { inherit prelude pkgs pkg fetcher; usage = $(nix_str "$usage"); }
   )"
 }
 
@@ -425,17 +473,17 @@ hash_from_err() {
   # swapping the order of the reported hashes.
   # https://github.com/NixOS/nix/commit/5e6fa9092fb5be722f3568c687524416bc746423
   if ! actual_hash=$(grep --only-matching "[a-z0-9]\{${actual_hash_size}\}" <<< "$err" > >( [[ $err == *'instead of the expected hash'* ]] && head -1 || tail -1 )); then
-    [[ -n $out ]] && echo "$out" >&2
-    [[ -n $err ]] && echo "$err" >&2
-    issue "The only expected error message is that of a hash mismatch, yet the grep for it failed."
+    (( debug )) && [[ -n $out ]] && printf '%s\n' "$out" >&2
+    [[ -n $err ]] && sed '/./,$!d' <<< "$err" >&2
+    exit 1
   fi
 }
 
 hash_builtin() {
   capture_err_verbose_out nix_eval --raw "(
-    with import $lib/fetcher.nix { inherit lib pkgs expr index fetcher; };
-    with import $lib/prefetcher.nix { inherit lib pkgs pkg fetcher fetcherArgs hashAlgo hash fetchURL; };
-    (with prefetcher; fun (args // { ${hash_algo} = probablyWrongHashes.${hash_algo}; })).drvPath
+    with import $lib/fetcher.nix { inherit prelude pkgs expr index fetcher; };
+    with import $lib/prefetcher.nix { inherit prelude pkgs pkg fetcher fetcherArgs hashAlgo hash fetchURL; };
+    prefetcher prefetcher.args
   )" && issue_no_hash_mismatch || hash_from_err
 }
 
@@ -455,16 +503,15 @@ hash_generic() {
       fi
     done < <(nix-store --query --roots $outputs)
   fi
-
   capture_err_verbose_out nix-store --quiet --realize "$wrong_drv_path" && issue_no_hash_mismatch || hash_from_err
 }
 
 prefetch() {
   out=$(nix_call 'prefetch' --json "(
-    with import $lib/fetcher.nix { inherit lib pkgs expr index fetcher; };
-    with import $lib/prefetcher.nix { inherit lib pkgs pkg fetcher fetcherArgs hashAlgo hash fetchURL; };
+    with import $lib/fetcher.nix { inherit prelude pkgs expr index fetcher; };
+    with import $lib/prefetcher.nix { inherit prelude pkgs pkg fetcher fetcherArgs hashAlgo hash fetchURL; };
     json
-  )") || exit
+  )" --option allow-unsafe-native-code-during-evaluation true) || exit
 
   if ! vars=$(jq --raw-output '.bash_vars | to_entries | .[] | .key + "=" + .value' <<< "$out"); then
     [[ -n $out ]] && echo "$out" >&2
@@ -477,6 +524,8 @@ prefetch() {
 
   log=$(jq --raw-output '.log' <<< "$out")
   (( ! quiet )) && [[ -n $log ]] && echo "$log" >&2 && echo >&2
+
+  (( ! hash_support && ! no_hash )) && die "The fetcher '$fetcher' does not support hashes, use the `--no-hash` option to ignore hashes."
 
   if (( no_hash )); then
     actual_hash=$expected_hash
@@ -494,28 +543,31 @@ prefetch() {
   case $output_type in
     expr) printf '%s\n' "(
   with $(awk 'NR > 1 { printf "  " } { print }' <<< "$args_nix");
-  with import $lib/pkgs.nix { inherit nixpkgsPath; };
-  with import $lib/fetcher.nix { inherit lib pkgs expr index fetcher; };
-  with import $lib/prefetcher.nix { inherit lib pkgs pkg fetcher fetcherArgs hashAlgo hash fetchURL; };
+  with import $lib/pkgs.nix nixpkgsPath;
+  with import $lib/fetcher.nix { inherit prelude pkgs expr index fetcher; };
+  with import $lib/prefetcher.nix { inherit prelude pkgs pkg fetcher fetcherArgs hashAlgo hash fetchURL; };
   { inherit pkgs fetcher prefetcher; }
 )";;
     nix) nix-instantiate --eval --strict --expr '{ json }: builtins.fromJSON json' --argstr json "$json";;
     json) echo "$json";;
-    shell) jq --raw-output 'to_entries | .[] | .key + "=" + .value' <<< "$json";;
+    shell) jq --join-output 'to_entries | .[] | .key + "=" + .value + "\u0000"' <<< "$json";;
     raw) echo "$actual_hash";;
   esac
 
   if (( print_path )); then
-    [[ $output_type == raw ]] || die "The print path option only works with the default raw output."
     if [[ $fetcher == builtins.* ]]; then
       output=$(nix_eval --raw "(
-        with import $lib/fetcher.nix { inherit lib pkgs expr index fetcher; };
-        with import $lib/prefetcher.nix { inherit lib pkgs pkg fetcher fetcherArgs hashAlgo hash fetchURL; };
-        (with prefetcher; fun (args // { ${hash_algo} = \"${actual_hash}\"; })).out
+        with import $lib/fetcher.nix { inherit prelude pkgs expr index fetcher; };
+        with import $lib/prefetcher.nix { inherit prelude pkgs pkg fetcher fetcherArgs hashAlgo hash fetchURL; };
+        prefetcher (prefetcher.args $( (( hash_support )) && echo "// { ${hash_algo} = \"${actual_hash}\"; }" ))
       )") || exit
     fi
     echo "$output"
   fi
+
+  (( print_urls )) && jq --raw-output '.urls[]' <<< "$out"
+
+  return 0
 }
 
 if (( help )); then

@@ -1,14 +1,14 @@
-{ lib, pkgs, deep ? false }:
+{ prelude, pkgs, deep }:
 
-with lib;
+with prelude;
 
 let
-  listFetchers = parents: pkgs:
+  recur = parents: pkgs:
     concatLists (mapAttrsToList (name: x:
       let names = parents ++ [ name ];
-      in if isFetcher name x then [ (concatStringsSep "." names) ]
-      else if deep && isRecursable x then listFetchers names x
+      in if isFetcher name then [ (concatStringsSep "." names) ]
+      else if deep && isRecursable x then recur names x
       else []
     ) pkgs);
 
-in listFetchers [] pkgs
+in recur [] pkgs

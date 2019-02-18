@@ -1,14 +1,14 @@
 #compdef nix-prefetch
 
-# The `nix eval` has a bug causing autocompletion to act buggy when stderr is not redirected to /dev/null,
-# even though there is no output being written to stderr by `nix shell`.
-
 _nix_prefetch_attrs() {
-  local -a attrs
   # Based on `escapeNixString`:
   # https://github.com/NixOS/nixpkgs/blob/d4224f05074b6b8b44fd9bd68e12d4f55341b872/lib/strings.nix#L316
   str=$(jq --null-input --arg str "$1" '$str')
   str="${str//\$/\\\$}"
+
+  # The `nix eval` has a bug causing autocompletion to act buggy when stderr is not redirected to /dev/null,
+  # even though there is no output being written to stderr by `nix shell`.
+  local -a attrs
   attrs=( $(nix eval --raw '(
     let pkgs = import <nixpkgs> { }; in with pkgs.lib;
     concatMapStrings (s: s + "\n") (filter (hasPrefix '"$str"') (attrNames pkgs))
@@ -17,8 +17,14 @@ _nix_prefetch_attrs() {
 }
 
 _nix_prefetch() {
-  local params=( '-f' '--file' '-A' '--attr' '-E' '--expr' '-i' '--index' '-F' '--fetcher' '-t' '--type' '--hash-algo' '-h' '--hash' '--input' '--output' )
-  local flags=( '--fetch-url' '--print-path' '--no-hash' '--force' '--deep' '-l' '--list' '-q' '--quiet' '-v' '--verbose' '-vv' '--debug' '--help' '--version' )
+  local params=(
+    '-f' '--file' '-A' '--attr' '-E' '--expr' '-i' '--index' '-F' '--fetcher'
+    '-t' '--type' '--hash-algo' '-h' '--hash' '--input' '--output'
+  )
+  local flags=(
+    '--fetch-url' '--print-path' '--no-hash' '--force' '--autocomplete' '--deep' '-l' '--list'
+    '-q' '--quiet' '-v' '--verbose' '-vv' '--debug' '--help' '--version'
+  )
 
   local prev_word=${words[CURRENT - 1]}
   local curr_word=${words[CURRENT]}

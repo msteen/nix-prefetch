@@ -1,6 +1,11 @@
 ✔ Cleanup. @done (2/13/2019, 3:01:35 AM)
 ✔ Document the logic behind validating the hash. @done (2/13/2019, 3:01:39 AM)
-☐ Undo "deliberately and explicitly ask curl/libcurl to ignore certificate validity".
+✔ Undo "deliberately and explicitly ask curl/libcurl to ignore certificate validity". @done (2/18/2019, 2:55:05 AM)
 ✔ Allow boolean flags for things like --showURLs and make --no-<flag> false. @done (2/13/2019, 5:11:49 AM)
-☐ Cache the results of --autocomplete.
-☐ Print URLs option.
+✔ Cache the results of --autocomplete. @done (2/13/2019, 7:01:12 PM)
+✔ Print URLs option. @done (2/17/2019, 12:41:45 PM)
+✔ Pass our modified `pkgs` when asked in an autocallable function. Or better yet try to find a way to manipulate the default overlays. @done (2/16/2019, 11:54:09 PM)
+✔ If `rev` is a required fetcher argument, provide a default for it by finding its default branch. @done (2/17/2019, 1:00:48 AM)
+✔ Overloaded builtins don't work with more indirect expressions. @done (2/17/2019, 9:11:32 PM)
+✔ Print path fails for non-hash builtin fetchers. @done (2/17/2019, 9:03:17 PM)
+☐ The security curlOpts should not show up in the returned fetcher arguments.

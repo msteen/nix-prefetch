@@ -1,9 +1,10 @@
-{ lib, pkgs, pkg, fetcher, fetcherArgs, hashAlgo, hash, fetchURL }@orig:
+{ prelude, pkgs, pkg, fetcher, fetcherArgs, hashAlgo, hash, fetchURL }@orig:
 
-with lib;
+with prelude;
 
 let
   isBuiltinFetcher = hasPrefix "builtins." fetcher.name;
+  fetcherFunctionArgs = functionArgs fetcher;
 
   fetcherArgs = mapAttrs (_: value: toExprFun value pkgs) orig.fetcherArgs;
 
@@ -31,12 +32,30 @@ let
 
   checkHash = orig.hash != null || givenHashAlgos == [ hashAlgo ];
 
-  fetcherHashArg = singleAttr hashAlgo hash;
+  hashSupport = !isBuiltinFetcher || fetcherFunctionArgs ? hash;
 
-  prefetcherArgs = removeAttrs fetcher.args hashAlgos // fetcherArgs // fetcherHashArg;
+  fetcherHashArg = optionalAttrs hashSupport (singleAttr hashAlgo hash);
+
+  # https://stackoverflow.com/questions/28666357/git-how-to-get-default-branch/54204231#54204231
+  gitHEAD = pkgs.writeScript "git-head.sh" ''
+    #!${pkgs.bash}/bin/bash
+    printf '"%s"' "$(${pkgs.git}/bin/git ls-remote "$1" HEAD | ${pkgs.gawk}/bin/awk '{ print $1 }')"
+  '';
+
+  fetcherRevArg = url: { rev = exec [ gitHEAD url ]; };
+
+  secureCurlOpts = { curlOpts = " --no-insecure --cacert ${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt "; };
+  fetcherSecureArg = optionalAttrs (fetcherFunctionArgs ? curlOpts) secureCurlOpts;
+
+  prefetcherArgs =
+    let args = removeAttrs fetcher.args hashAlgos // fetcherArgs // fetcherHashArg // fetcherSecureArg;
+    in args // optionalAttrs ((!(args ? rev)) && (!(fetcherFunctionArgs.rev or true))) (
+      if fetcher.name == "fetchFromGitHub" && args ? owner && args ? repo then fetcherRevArg (fetcher (prefetcherArgs // { fetchSubmodules = true; })).url
+      else if args ? url && hasSuffix ".git" args.url then fetcherRevArg args.url
+      else {});
 
   urls =
-    let src = fetcher.value prefetcherArgs;
+    let src = fetcher prefetcherArgs;
     in if !isBuiltinFetcher && src ? urls then src.urls
     else if !isBuiltinFetcher && src ? url then [ src.url ]
     else if prefetcherArgs ? url then [ prefetcherArgs.url ]
@@ -44,27 +63,25 @@ let
 
   prefetcher =
     if !fetchURL then fetcher // { args = prefetcherArgs; }
-    else if !isBuiltinFetcher then {
-      name = "fetchurl";
-      value = pkgs.fetchurl;
-      args =
-        if urls != [] then { url = head urls; } // optionalAttr prefetcherArgs "name" // fetcherHashArg
-        else throw "The fetcher ${fetcher.name} does not define any URLs.";
+    else if !isBuiltinFetcher then pkgs.fetchurl.__fetcher // { args =
+      if urls != [] then { url = head urls; } // optionalAttr prefetcherArgs "name" // fetcherHashArg // secureCurlOpts
+      else throw "The fetcher ${fetcher.name} does not define any URLs.";
     }
     else throw "The fetchURL option does not work with builtin fetchers.";
 
   log = let toPrettyCode = x: let s = toPretty x; in replaceStrings [ "\n" ] [ "\n>   " ] s; in ''
     The ${if pkg != null then "package ${pkg.name} will be fetched" else "fetcher will be called"} as follows:
-    > ${if hasPrefix "/" prefetcher.name then "import ${prefetcher.name}" else prefetcher.name} {
+    > ${if hasPrefix "/" prefetcher.name then "import ${prefetcher.name}" else prefetcher.name} ${if prefetcher.args == {} then "{}" else ''
+    {
     ${lines' (mapAttrsToList (name: value: ">   ${name} = ${toPrettyCode value};") prefetcher.args)}
-    > }
+    > }''}
 
   '' + optionalString (urls != []) ''
     The following URLs will be fetched as part of the source:
     ${lines urls}
   '';
 
-  src = with prefetcher; value args;
+  src = prefetcher prefetcher.args;
 
   wrongSrc = if src.outputHash != probablyWrongHashes.${hashAlgo}
     then src.overrideAttrs (const { outputHash = probablyWrongHashes.${hashAlgo}; })
@@ -77,9 +94,10 @@ let
       expected_hash = hash;
       actual_hash_size = hashEncodings.base32.lengths.${hashAlgo};
       check_hash = checkHash;
+      hash_support = hashSupport;
     };
     fetcher_args = prefetcher.args;
-    inherit log;
+    inherit urls log;
   } (optionalAttrs (!isBuiltinFetcher) {
     bash_vars = mapAttrs (const toString) {
       drv_path = src.drvPath;
