@@ -61,12 +61,10 @@ run-test() {
     echo "testing... $*"
     if run "$@" >&2; then
       echo "$(quote_args "$@")... succeeded!"
-      confirm "Do you want to continue with the next test?" && break || exit 0
+      break
     else
       echo "$(quote_args "$@")... failed!"
-      confirm "Do you want to retry?" || {
-        confirm "Do you want to continue with the next test?" && break || exit 1
-      }
+      confirm "Do you want to retry?" || break
     fi
   done
 }

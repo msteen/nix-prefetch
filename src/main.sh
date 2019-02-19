@@ -121,10 +121,8 @@ capture_err() {
     {
       "$@" 2> >(awk '
         /instead of the expected hash/ || /hash mismatch/ { hash_mismatch=1 }
-        {
-          if (hash_mismatch) { print }
-          else if (printed_stderr || $0 != "") { print > "/dev/stderr"; printed_stderr=1 }
-        }
+        { if (hash_mismatch) { print }
+          else if (printed_stderr || $0 != "") { print > "/dev/stderr"; printed_stderr=1 } }
         END { if (printed_stderr) { print "" > "/dev/stderr" } }
       ' > /dev/fd/3)
       local ret=$?
@@ -164,10 +162,6 @@ die_extra_param() {
 
 die_option_param() {
   die_help "The option '$arg' needs a parameter."
-}
-
-die_arg_count() {
-  die_help "A wrong number of arguments has been given."
 }
 
 show_usage() {
@@ -271,6 +265,7 @@ for arg in "$@"; do
 done
 
 output_type=raw
+declare -A fetcher_args
 while (( $# >= 1 )); do
   arg=$1; shift
   param=
@@ -293,13 +288,49 @@ while (( $# >= 1 )); do
     -q|--quiet)   silent=0; quiet=1; verbose=0; debug=0;;
     -v|--verbose) silent=0; quiet=0; verbose=1;;
     -vv|--debug)  silent=0; quiet=0; verbose=1; debug=1;;
-    --) break;;
     *)
-      if [[ $arg == -* ]]; then
-        set -- "$arg" "$@" # i.e. unshift
-        break
+      if [[ $arg == --* ]]; then
+        while true; do
+          if [[ $arg == -- ]]; then
+            disambiguate=1
+            (( $# >= 1 )) && [[ $1 == --* ]] && arg=$1 && shift && continue || break
+          fi
+
+          name=${arg#--*}
+
+          case $arg in
+            --autocomplete|--help) declare "${name}=1";;
+            *) false;;
+          esac && continue
+
+          if (( $# == 0 )) || [[ ! $1 =~ ^(-f|--file|-A|--attr|-E|--expr)$ && $1 == --* ]]; then
+            type='expr'
+            case $name in
+              no-*) value='false'; name=${name#no-};;
+                 *) value='true';;
+            esac
+          else
+            (( $# >= 1 )) || die_option_param
+            type='str'
+            value=$1; shift
+            case $value in
+              -f|--file) type='file';;
+              -A|--attr) type='attr';;
+              -E|--expr) type='expr';;
+              *) false;;
+            esac && {
+              (( $# >= 1 )) || die_option_param
+              value=$1; shift
+            }
+          fi
+
+          fetcher_args[$name]=$(nix_typed "$type" "$value")
+
+          (( disambiguate )) && (( $# >= 1 )) && [[ $1 == --* ]] && arg=$1 && shift || break
+        done
+        (( disambiguate )) && break || continue
       fi
-      if (( arg_count == 0 )); then
+      if (( param_count == 0 )); then
         expr=$arg
         if [[ $arg == *://* ]]; then
           expr_type='url'
@@ -310,12 +341,12 @@ while (( $# >= 1 )); do
         else
           expr_type='expr'
         fi
-      elif (( arg_count == 1 )); then
+      elif (( param_count == 1 )); then
         hash=$arg
       else
         die_extra_param "$arg"
       fi
-      (( arg_count++ ))
+      (( param_count++ ))
       ;;
   esac
   if [[ -n $param ]]; then
@@ -331,8 +362,6 @@ if [[ -v fetcher ]]; then
   fetcher=$(nix_typed "$type" "$fetcher")
 fi
 
-declare -A fetcher_args
-
 # An expression containing an URL is just syntax sugar
 # for calling fetchurl with the URL passed as a fetcher argument.
 if [[ $expr_type == url ]]; then
@@ -347,39 +376,6 @@ if [[ -v file && ! -v expr ]]; then
   expr=$file
   file='<nixpkgs>' # reset to the default
 fi
-
-# The remaining arguments are passed to the fetcher.
-while (( $# >= 1 )) && [[ $1 == --* ]]; do
-  arg=$1; arg=${arg#--*}; shift
-
-  case $arg in
-    autocomplete|help) declare "${arg}=1";;
-    *) false;;
-  esac && continue
-
-  if (( $# == 0 )) || [[ ! $1 =~ ^(-f|--file|-A|--attr|-E|--expr)$ && $1 == --* ]]; then
-    type='expr'
-    case $arg in
-      no-*) value='false'; arg=${arg#no-};;
-         *) value='true';;
-    esac
-  else
-    (( $# >= 1 )) || die_option_param
-    type='str'
-    value=$1; shift
-    case $value in
-      -f|--file) type='file';;
-      -A|--attr) type='attr';;
-      -E|--expr) type='expr';;
-      *) false;;
-    esac && {
-      (( $# >= 1 )) || die_option_param
-      value=$1; shift
-    }
-  fi
-
-  fetcher_args[$arg]=$(nix_typed "$type" "$value")
-done
 
 if [[ -n $input_type ]]; then
   [[ $input_type == raw ]] && quoted_input=$(quote_nul < /dev/stdin) || input=$(< /dev/stdin)
@@ -495,7 +491,18 @@ hash_nix_prefetch_url() {
   [[ -n $name ]] && args+=( --name "$name" )
   args+=( "$url" )
   (( check_hash )) && args+=( "$expected_hash" )
-  IFS=$'\n' read -r -d '' actual_hash output < <(nix-prefetch-url --type "$hash_algo" "${args[@]}")
+  {
+    local out ret
+    out=$(nix-prefetch-url --type "$hash_algo" "${args[@]}" 2> >(awk '
+      /path is '\''\/nix\/store\/[^'\'']+'\''/ { next }
+      { print }
+    ' > /dev/fd/3))
+    ret=$?
+    cat <&3 >&2
+    (( ! ret )) || exit $ret
+    IFS=$'\n' read -r -d '' actual_hash output <<< "$out"
+  } 3<<EOF
+EOF
 }
 
 hash_builtin() {
