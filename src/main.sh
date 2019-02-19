@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+shopt -s extglob
+
 ## ##
 ## Configuration
 ## ##
@@ -265,6 +267,7 @@ for arg in "$@"; do
 done
 
 output_type=raw
+compute_hash=1
 declare -A fetcher_args
 while (( $# >= 1 )); do
   arg=$1; shift
@@ -279,10 +282,11 @@ while (( $# >= 1 )); do
     -h|--hash) param='hash';;
     --input) param='input_type';;
     --output) param='output_type';;
-    --fetchurl|--print-urls|--print-path|--force|--no-hash|--autocomplete|--help)
+    --?(no-)@(fetchurl|print-urls|print-path|compute-hash|force|autocomplete|help))
       var=${arg#--}
+      [[ $var == no-* ]] && var=${var#no-} && value=0 || value=1
       var=${var//-/_}
-      declare "${var}=1"
+      declare "${var}=${value}"
       ;;
     -s|--silent)  silent=1; quiet=1; verbose=0; debug=0;;
     -q|--quiet)   silent=0; quiet=1; verbose=0; debug=0;;
@@ -357,6 +361,9 @@ done
 
 handle_common
 
+[[ $input_type =~ ^(|nix|json|shell)$ ]] || die "Unsupported input type '${input_type}'."
+[[ $output_type =~ ^(expr|nix|json|shell|raw)$ ]] || die "Unsupported output type '${output_type}'."
+
 if [[ -v fetcher ]]; then
   [[ $fetcher == */* && -e $fetcher || $fetcher == '<'* ]] && type='file' || type='attr'
   fetcher=$(nix_typed "$type" "$fetcher")
@@ -394,7 +401,7 @@ if [[ -n $input_type ]]; then
 fi
 
 if (( debug )); then
-  printf '%s\n' "$(print_bash_vars 'file expr index fetcher fetchurl hash hash_algo input_type output_type print_path print_urls no_hash force silent quiet verbose debug autocomplete help' 2>&1)" >&2
+  printf '%s\n' "$(print_bash_vars 'file expr index fetcher fetchurl hash hash_algo input_type output_type print_path print_urls compute_hash force silent quiet verbose debug autocomplete help' 2>&1)" >&2
   for name in "${!fetcher_args[@]}"; do
     value=${fetcher_args[$name]}
     print_assign "fetcher_args[$name]" "$value"
@@ -434,6 +441,14 @@ args_nix="{
   hash = $( [[ -v hash ]] && nix_str "$hash" || echo null );
   fetchURL = $(nix_bool "$fetchurl");
 }"
+
+[[ $output_type == expr ]] && printf '%s\n' "(
+  with $(awk 'NR > 1 { printf "  " } { print }' <<< "$args_nix");
+  with import $lib/pkgs.nix nixpkgsPath;
+  with import $lib/fetcher.nix { inherit prelude pkgs expr index fetcher; };
+  with import $lib/prefetcher.nix { inherit prelude pkgs pkg fetcher fetcherArgs hashAlgo hash fetchURL; };
+  { inherit pkgs fetcher prefetcher; }
+)" && exit
 
 printf '%s\n' "$( [[ -v fetcher ]] && printf '%s\n' "$fetcher" || echo null )" > "$XDG_RUNTIME_DIR/nix-prefetch/fetcher.nix"
 
@@ -483,7 +498,7 @@ hash_from_err() {
   fi
 }
 
-hash_nix_prefetch_url() {
+compute_hash_nix_prefetch_url() {
   local args=()
   (( print_path )) && args+=( --print-path )
   [[ $fetcher =~ ^(builtins.fetchTarball|fetchTarball)$ ]] && args+=( --unpack )
@@ -505,7 +520,7 @@ hash_nix_prefetch_url() {
 EOF
 }
 
-hash_builtin() {
+compute_hash_builtin() {
   capture_err nix_eval --raw "(
     with import $lib/fetcher.nix { inherit prelude pkgs expr index fetcher; };
     with import $lib/prefetcher.nix { inherit prelude pkgs pkg fetcher fetcherArgs hashAlgo hash fetchURL; };
@@ -513,7 +528,7 @@ hash_builtin() {
   )" && issue_no_hash_mismatch || hash_from_err
 }
 
-hash_generic() {
+compute_hash_generic() {
   # Try to determine whether the current hash is already valid,
   # so that we do not have to fetch the sources unnecessarily.
   if (( ! force )); then
@@ -547,7 +562,7 @@ prefetch() {
   print_bash_vars "$(jq --raw-output '.bash_vars | keys | join(" ")' <<< "$out")"
 
   [[ $fetcher != requireFile ]] || die_require_file
-  (( ! hash_support && ! no_hash )) && die "The fetcher '$fetcher' does not support hashes, use the --no-hash option to ignore hashes."
+  (( ! hash_support && compute_hash )) && die "The fetcher '$fetcher' does not support hashes, use the --no-hash option to ignore hashes."
 
   [[ $fetcher =~ ^(fetchurlBoot|builtins.fetchurl|builtins.fetchTarball|fetchTarball)$ ]] && use_nix_prefetch_url=1
 
@@ -556,14 +571,14 @@ prefetch() {
 
   (( verbose )) && printf 'The following URLs will be fetched as part of the source:\n%s\n\n' "$(jq --raw-output '.urls[]' <<< "$out")" >&2
 
-  if (( no_hash )); then
+  if (( ! compute_hash )); then
     actual_hash=$expected_hash
   elif (( use_nix_prefetch_url )); then
-    hash_nix_prefetch_url
+    compute_hash_nix_prefetch_url
   elif [[ $fetcher == builtins.* ]]; then
-    hash_builtin
+    compute_hash_builtin
   else
-    hash_generic
+    compute_hash_generic
   fi
 
   if (( check_hash )) && [[ $expected_hash != "$actual_hash" ]]; then
@@ -572,13 +587,6 @@ prefetch() {
 
   [[ $output_type == raw ]] || json=$(jq --raw-output '.fetcher_args | .'"$hash_algo"' = "'"$actual_hash"'"' <<< "$out")
   case $output_type in
-    expr) printf '%s\n' "(
-  with $(awk 'NR > 1 { printf "  " } { print }' <<< "$args_nix");
-  with import $lib/pkgs.nix nixpkgsPath;
-  with import $lib/fetcher.nix { inherit prelude pkgs expr index fetcher; };
-  with import $lib/prefetcher.nix { inherit prelude pkgs pkg fetcher fetcherArgs hashAlgo hash fetchURL; };
-  { inherit pkgs fetcher prefetcher; }
-)";;
     nix) nix-instantiate --eval --strict --expr '{ json }: builtins.fromJSON json' --argstr json "$json";;
     json) printf '%s\n' "$json";;
     shell) jq --join-output 'to_entries | .[] | .key + "=" + .value + "\u0000"' <<< "$json";;

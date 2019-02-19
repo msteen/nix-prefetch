@@ -3,9 +3,7 @@ origNixpkgsPath:
 let prelude = import ./prelude.nix; in with prelude;
 
 let
-  nixpkgsPath = if builtins.typeOf origNixpkgsPath != "path"
-    then /. + substring 1 (-1) (builtins.unsafeDiscardStringContext (toString origNixpkgsPath))
-    else origNixpkgsPath;
+  nixpkgsPath = toPath origNixpkgsPath;
 
   pkgsTopLevelPath = nixpkgsPath + /pkgs/top-level;
 

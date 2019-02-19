@@ -12,7 +12,10 @@ in with import ./prelude.nix;
   # The builtin is also available outside of `builtins`.
   inherit (customBuiltins) fetchTarball;
 
-  hello_rs = callPackage ../contrib/hello_rs { };
+  hello_rs = callPackage (if pathExists ../../contrib
+    then ../../contrib/hello_rs # lib/nix-prefetch
+    else    ../contrib/hello_rs # lib
+  ) { };
 }
 
 // optionalAttrs fetcherDefined (let
@@ -59,5 +62,4 @@ in genFetcherOverlay fetcherSuperPkgs (topLevelFetchers ++ optional (fetcher.typ
   # fetchcvs, fetchegg (no HTTPS support it seems)
   # fetchfossil (does not support HTTPS anyways, it needs to be linked to openssl for that: https://www.fossil-scm.org/xfer/doc/trunk/www/ssl.wiki)
   # fetchmtn ?
-  # fetchs3 ?
 })

@@ -11,7 +11,8 @@ _nix_prefetch_attrs() {
   # The `nix eval` has a bug causing autocompletion to act buggy when stderr is not redirected to /dev/null,
   # even though there is no output being written to stderr by `nix shell`.
   _nix_prefetch_reply "$(nix eval --raw '(
-    let pkgs = import <nixpkgs> { }; in with pkgs.lib;
+    let pkgs = import <nixpkgs> { }; in
+    with pkgs.lib;
     concatMapStrings (s: s + "\n") (filter (hasPrefix '"$str"') (attrNames pkgs))
   )' 2> /dev/null)"
 }

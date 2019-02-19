@@ -7,7 +7,7 @@ with stdenv.lib;
 stdenv.mkDerivation rec {
   name = "${pname}-${version}";
   pname = "nix-prefetch";
-  version = "0.1.0";
+  version = "0.2.0";
 
   src = ./.;
 
@@ -50,10 +50,13 @@ stdenv.mkDerivation rec {
 
     install -D contrib/nix-prefetch-completion.bash $out/share/bash-completion/completions/nix-prefetch
     install -D contrib/nix-prefetch-completion.zsh $out/share/zsh/site-functions/_nix_prefetch
+
+    mkdir $out/contrib
+    cp -r contrib/hello_rs $out/contrib/
   '';
 
   meta = {
-    description = "Prefetch any fetcher function call, e.g. a package source";
+    description = "Prefetch any fetcher function call, e.g. package sources";
     homepage = https://github.com/msteen/nix-prefetch;
     license = licenses.mit;
     maintainers = with maintainers; [ msteen ];

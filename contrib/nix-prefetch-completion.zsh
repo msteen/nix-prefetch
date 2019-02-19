@@ -10,7 +10,8 @@ _nix_prefetch_attrs() {
   # even though there is no output being written to stderr by `nix shell`.
   local -a attrs
   attrs=( $(nix eval --raw '(
-    let pkgs = import <nixpkgs> { }; in with pkgs.lib;
+    let pkgs = import <nixpkgs> { }; in
+    with pkgs.lib;
     concatMapStrings (s: s + "\n") (filter (hasPrefix '"$str"') (attrNames pkgs))
   )' 2> /dev/null) )
   _describe 'attributes' attrs

@@ -53,6 +53,8 @@ in let prelude = with prelude; import ./lib.nix // {
       x = import path;
       fx = args:
         let
+          # We cannot supply the required fetcher arguments for imported fetchers like we do for fetcher functions,
+          # because we don't know beforehand whether it is a fetcher function or not.
           y = x args;
           fy = args:
             let z = y args;
@@ -81,7 +83,7 @@ in let prelude = with prelude; import ./lib.nix // {
 
   markFetcher = { type, name, fetcher }:
     let
-      customFetcher = args: markFetcherDrv { inherit type name fetcher args; drv = fetcher args; };
+      customFetcher = args: markFetcherDrv { inherit type name fetcher args; drv = fetcher (requiredFetcherArgs // args); };
 
       # The required fetcher arguments are assumed to be of type string,
       # because requiring a complex value, e.g. a derivation attrset, is very unlikely,
@@ -92,7 +94,6 @@ in let prelude = with prelude; import ./lib.nix // {
       __fetcher = (if !(elem name primitiveFetchers) then setFunctionArgs fetcher (functionArgs (customFetcher requiredFetcherArgs).__fetcher) else fetcher)
         // { inherit type name; args = {}; };
     };
-
 
   markFetcherDrv = { type, name, fetcher, args, drv ? fetcher args }: let drvOverriden = (drv.overrideAttrs or (const drv)) (origAttrs:
     let

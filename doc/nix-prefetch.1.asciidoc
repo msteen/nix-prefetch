@@ -15,7 +15,7 @@ nix-prefetch - Prefetch any fetcher function call, e.g. package sources
               [(*-f* | *--file*) <file>] [*--fetchurl*]
               [(*-t* | *--type* | *--hash-algo*) <hash-algo>] [(*-h* | *--hash*) <hash>]
               [*--input* <input-type>] [*--output* <output-type>] [*--print-urls*] [*--print-path*]
-              [*--no-hash*] [*--force*] [*-s* | *--silent*] [*-q* | *--quiet*] [*-v* | *--verbose*] [*-vv* | *--debug*] ...
+              [*--compute-hash*] [*--force*] [*-s* | *--silent*] [*-q* | *--quiet*] [*-v* | *--verbose*] [*-vv* | *--debug*] ...
               ([*-f* | *--file*] <file> | [*-A* | *--attr*] <attr> | [*-E* | *--expr*] <expr> | <url>) [<hash>]
               [*--*] [*--<name>* ((*-f* | *--file*) <file> | (*-A* | *--attr*) <attr> | (*-E* | *--expr*) <expr> | <str>) | *--autocomplete* | *--help*] ...
  *nix-prefetch* [(*-f* | *--file*) <file>] [*--deep*] [*-s* | *--silent*] [*-v* | *--verbose*] [*-vv* | *--debug*] ... (*-l* | *--list*)
@@ -95,8 +95,8 @@ and can placed both before and after the parameters.
 *--print-path*::
   Print the output path of the resulting derivation. Only applicable to *--output* 'raw' (which is the default output type).
 
-*--no-hash*::
-  Skip determining the hash (meant for debugging purposes).
+*--compute-hash*::
+  Whether to compute the hash.
 
 *--force*::
   Always redetermine the hash, even if the given hash is already determined to be valid.

@@ -25,6 +25,9 @@ let lib = builtins // import <nixpkgs/lib>; in with lib; lib // rec {
   inheritAttr = attrs: name: singleAttr name attrs.${name};
   optionalAttr = attrs: name: if attrs ? ${name} then inheritAttr attrs name else {};
   maybeNull = x: default: if x != null then x else default;
+  toPath = x: if builtins.typeOf x != "path"
+    then /. + substring 1 (-1) (builtins.unsafeDiscardStringContext (toString x))
+    else x;
   toExpr = x: if isPath x then import x else x;
   toPretty = v: generators.toPretty { allowPrettyValues = true; } (let pr = f: { __pretty = f; val = v; }; in
     if isString v && match ".*\n.*" v != null then pr (s:
