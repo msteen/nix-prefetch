@@ -88,6 +88,7 @@ nix-prefetch() {
 run-test nix-prefetch --list
 run-test nix-prefetch --list --deep
 run-test nix-prefetch hello --autocomplete
+run-test not nix-prefetch
 run-test nix-prefetch fetchFromGitHub --help
 run-test nix-prefetch hello
 run-test nix-prefetch hello --hash-algo sha512

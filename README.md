@@ -7,6 +7,9 @@ It should work with any fetcher function (function that produces a fixed-output 
 package derivations, or fixed-output derivations. In the case of the latter two (i.e. the derivations),
 it will reuse the arguments already passed to the fetcher.
 
+The tool relies on an overlay to hijack calls made to the fetchers and to patch them to ignore insecure flags (those that disable certificate checking).
+However it is possible that the particular fetcher used by a package was detected to be a fetcher function, for those edge cases, there is the `--fetcher` option (see manpage).
+
 Use cases for this tool include determining the hash of a new package version, automated update scripts, and inspecting the current argument passed to a fetcher.
 
 TOFU
@@ -42,7 +45,7 @@ Features
 
 * Automatically calls `callPackage { }` whenever this is applicable.
 
-* Monkey patches the fetchers to not ignore certificate validity checking,
+* Monkey patches the fetchers (via an overlay) to not ignore certificate validity checking,
   to reduce the risk of man-in-the-middle (MITM) attacks when prefetching.
 
 * Automatically determines the default Git revision when none have been given.
@@ -82,6 +85,7 @@ Limitations
 
 Examples
 ---
+
 A package source:
 ```
 $ nix-prefetch hello.src
@@ -107,9 +111,9 @@ The package test-0.1.0 will be fetched as follows:
 0jsvhyvxslhyq14isbx2xajasisp7xdgykl0dffy3z1lzxrv51kb
 ```
 
-A package with verbose output:
+A package checked to already be in the Nix store thats not installed:
 ```
-$ nix-prefetch hello --verbose
+$ nix-prefetch hello --check-store --verbose
 The package hello-2.10 will be fetched as follows:
 > fetchurl {
 >   sha256 = "0ssi1wpaf7plaswqqjwigppsg5fyh99vdlb9kzl7c9lng89ndq1i";
@@ -123,9 +127,21 @@ trying http://ftpmirror.gnu.org/hello/hello-2.10.tar.gz
   % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
                                  Dload  Upload   Total   Spent    Left  Speed
   0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0
-100  708k  100  708k    0     0  1836k      0 --:--:-- --:--:-- --:--:-- 1836k
+100  708k  100  708k    0     0  1822k      0 --:--:-- --:--:-- --:--:-- 1822k
 
 0ssi1wpaf7plaswqqjwigppsg5fyh99vdlb9kzl7c9lng89ndq1i
+```
+
+A package checked to already be in the Nix store thats installed (i.e. certain the hash is valid, no need to redownload):
+```
+$ nix-prefetch git --check-store --verbose
+The package git-minimal-2.18.1 will be fetched as follows:
+> fetchurl {
+>   sha256 = "1dlq120c9vmvp1m9gmgd6m609p2wkgfkljrpb0i002mpbjj091c8";
+>   url = "https://www.kernel.org/pub/software/scm/git/git-2.18.1.tar.xz";
+> }
+
+1dlq120c9vmvp1m9gmgd6m609p2wkgfkljrpb0i002mpbjj091c8
 ```
 
 Modify the Git revision of a call to `fetchFromGitHub`:
@@ -158,7 +174,7 @@ The fetcher will be called as follows:
 >   patches = [  ];
 >   sha256 = "0sjjj9z1dhilhpc8pq4154czrb79z9cm044jvn75kxcjv6v5l2m5";
 >   sourceRoot = null;
->   src = /nix/store/lwjqbhfln0x6plmwbjjfpvc4plxmq819-nix-prefetch-0.1.0/contrib/hello_rs;
+>   src = /nix/store/bydfinrwqxapxa9fyky9djq8v0mr9xkw-nix-prefetch-0.1.0/contrib/hello_rs;
 >   srcs = null;
 > }
 

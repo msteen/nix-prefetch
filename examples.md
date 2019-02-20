@@ -23,9 +23,9 @@ The package test-0.1.0 will be fetched as follows:
 0jsvhyvxslhyq14isbx2xajasisp7xdgykl0dffy3z1lzxrv51kb
 ```
 
-A package with verbose output:
+A package checked to already be in the Nix store thats not installed:
 ```
-$ nix-prefetch hello --verbose 
+$ nix-prefetch hello --check-store --verbose 
 The package hello-2.10 will be fetched as follows:
 > fetchurl {
 >   sha256 = "0ssi1wpaf7plaswqqjwigppsg5fyh99vdlb9kzl7c9lng89ndq1i";
@@ -39,9 +39,21 @@ trying http://ftpmirror.gnu.org/hello/hello-2.10.tar.gz
   % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
                                  Dload  Upload   Total   Spent    Left  Speed
   0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0
-100  708k  100  708k    0     0  1836k      0 --:--:-- --:--:-- --:--:-- 1836k
+100  708k  100  708k    0     0  1822k      0 --:--:-- --:--:-- --:--:-- 1822k
 
 0ssi1wpaf7plaswqqjwigppsg5fyh99vdlb9kzl7c9lng89ndq1i
+```
+
+A package checked to already be in the Nix store thats installed (i.e. certain the hash is valid, no need to redownload):
+```
+$ nix-prefetch git --check-store --verbose 
+The package git-minimal-2.18.1 will be fetched as follows:
+> fetchurl {
+>   sha256 = "1dlq120c9vmvp1m9gmgd6m609p2wkgfkljrpb0i002mpbjj091c8";
+>   url = "https://www.kernel.org/pub/software/scm/git/git-2.18.1.tar.xz";
+> }
+
+1dlq120c9vmvp1m9gmgd6m609p2wkgfkljrpb0i002mpbjj091c8
 ```
 
 Modify the Git revision of a call to `fetchFromGitHub`:
@@ -74,7 +86,7 @@ The fetcher will be called as follows:
 >   patches = [  ];
 >   sha256 = "0sjjj9z1dhilhpc8pq4154czrb79z9cm044jvn75kxcjv6v5l2m5";
 >   sourceRoot = null;
->   src = /nix/store/lwjqbhfln0x6plmwbjjfpvc4plxmq819-nix-prefetch-0.1.0/contrib/hello_rs;
+>   src = /nix/store/bydfinrwqxapxa9fyky9djq8v0mr9xkw-nix-prefetch-0.1.0/contrib/hello_rs;
 >   srcs = null;
 > }
 

@@ -22,9 +22,10 @@ _nix_prefetch() {
   local params='
     -f --file -A --attr -E --expr -i --index -F --fetcher
     -t --type --hash-algo -h --hash --input --output '
-  local flags='
-    --fetch-url --print-path --no-hash --force --autocomplete --deep -l --list
-    -q --quiet -v --verbose -vv --debug --help --version '
+  local flags=' -s --silent -q --quiet -v --verbose -vv --debug -l --list --version ' flag
+  for flag in --fetch-url --print-urls --print-path --compute-hash --check-store --autocomplete --help --deep; do
+    flags+=" --no-${flag#--} $flag "
+  done
 
   COMPREPLY=()
   local prev_word=${COMP_WORDS[COMP_CWORD - 1]}
