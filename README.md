@@ -8,7 +8,7 @@ package derivations, or fixed-output derivations. In the case of the latter two 
 it will reuse the arguments already passed to the fetcher.
 
 The tool relies on an overlay to hijack calls made to the fetchers and to patch them to ignore insecure flags (those that disable certificate checking).
-However it is possible that the particular fetcher used by a package was detected to be a fetcher function, for those edge cases, there is the `--fetcher` option (see manpage).
+However it is possible that the particular fetcher used by a package was detected not to be a fetcher function, so for those edge cases there is the `--fetcher` option (see manpage).
 
 Use cases for this tool include determining the hash of a new package version, automated update scripts, and inspecting the current argument passed to a fetcher.
 
