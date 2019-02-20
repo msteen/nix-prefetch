@@ -46,7 +46,7 @@ let
 
   prefetcherArgs =
     let args = removeAttrs fetcher.args hashAlgos // fetcherArgs // fetcherHashArg;
-    in args // optionalAttrs ((!(args ? rev)) && (!(fetcherFunctionArgs.rev or true))) (
+    in args // optionalAttrs (fetcherFunctionArgs ? rev && args.rev or "" == "") (
       if fetcher.name == "fetchFromGitHub" && args ? owner && args ? repo then fetcherRevArg (fetcher (prefetcherArgs // { fetchSubmodules = true; })).url
       else if args ? url && hasSuffix ".git" args.url then fetcherRevArg args.url
       else {});

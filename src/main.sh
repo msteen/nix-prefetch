@@ -54,6 +54,12 @@ quote() {
   grep -q '^[a-zA-Z0-9_\.-]\+$' <<< "$*" && printf '%s' "$*" || printf '%s' "'${*//'/\\'}'"
 }
 
+quote_args() {
+  for arg in "$@"; do
+    printf '%s ' "$(quote "$arg")"
+  done
+}
+
 # https://stackoverflow.com/questions/6570531/assign-string-containing-null-character-0-to-a-variable-in-bash
 quote_nul() {
   sed 's/\\/\\\\/g;s/\x0/\\0/g'
@@ -148,10 +154,19 @@ nix_eval() {
   )" "${nix_eval_args[@]}" "$@"
 }
 
+nix_eval_prefetcher() {
+  local output_type=$1; shift
+  local nix=$1; shift
+  nix_eval "$output_type" "(
+    with import $lib/fetcher.nix { inherit prelude pkgs expr index fetcher; };
+    with import $lib/prefetcher.nix { inherit prelude pkgs pkg fetcher fetcherArgs hashAlgo hash fetchURL; };
+    $nix
+  )" "$@"
+}
+
 nix_call() {
   local name=$1; shift
-  (( debug )) && printf 'The following Nix function call will be evaluated:\n%s\n\n' "$({ head -1; unindent "$(cat)"; } <<< "$name $args_nix" | sed 's/^/> /')" >&2
-  nix_eval "$@"
+  (( debug )) && printf 'The following Nix function call will be evaluated:\n%s\n\n' "$( { head -1; unindent "$(cat)"; } <<< "$name $args_nix" | sed 's/^/> /' )" >&2
 }
 
 ## ##
@@ -257,7 +272,8 @@ for arg in "$@"; do
         nixpkgsPath = ($file);
         deep = $(nix_bool "$deep");
       }"
-      nix_call 'listFetchers' --raw "(
+      nix_call 'listFetchers'
+      nix_eval --raw "(
         with prelude;
         lines (import $lib/list-fetchers.nix { inherit prelude pkgs deep; })
       )"
@@ -282,11 +298,11 @@ while (( $# >= 1 )); do
     -h|--hash) param='hash';;
     --input) param='input_type';;
     --output) param='output_type';;
-    --?(no-)@(fetchurl|print-urls|print-path|compute-hash|force|autocomplete|help))
-      var=${arg#--}
-      [[ $var == no-* ]] && var=${var#no-} && value=0 || value=1
-      var=${var//-/_}
-      declare "${var}=${value}"
+    --?(no-)@(fetchurl|print-urls|print-path|compute-hash|check-store|autocomplete|help))
+      name=${arg#--}
+      [[ $name == no-* ]] && name=${name#no-} && value=0 || value=1
+      name=${name//-/_}
+      declare "${name}=${value}"
       ;;
     -s|--silent)  silent=1; quiet=1; verbose=0; debug=0;;
     -q|--quiet)   silent=0; quiet=1; verbose=0; debug=0;;
@@ -303,7 +319,10 @@ while (( $# >= 1 )); do
           name=${arg#--*}
 
           case $arg in
-            --autocomplete|--help) declare "${name}=1";;
+            --?(no-)@(autocomplete|help))
+              [[ $name == no-* ]] && name=${name#no-} && value=0 || value=1
+              declare "${name}=${value}"
+              ;;
             *) false;;
           esac && continue
 
@@ -401,7 +420,10 @@ if [[ -n $input_type ]]; then
 fi
 
 if (( debug )); then
-  printf '%s\n' "$(print_bash_vars 'file expr index fetcher fetchurl hash hash_algo input_type output_type print_path print_urls compute_hash force silent quiet verbose debug autocomplete help' 2>&1)" >&2
+  printf '%s\n' "$(print_bash_vars '
+    file expr index fetcher fetchurl hash hash_algo input_type output_type print_path print_urls
+    compute_hash check_store silent quiet verbose debug autocomplete help
+  ' 2>&1)" >&2
   for name in "${!fetcher_args[@]}"; do
     value=${fetcher_args[$name]}
     print_assign "fetcher_args[$name]" "$value"
@@ -409,7 +431,7 @@ if (( debug )); then
   echo >&2
 fi
 
-(( $# == 0 )) || die_help "Finished parsing the command line arguments, yet still found the following arguments remaining:$( for arg in "$@"; do printf ' %s' "$(quote "$arg")"; done )."
+(( $# == 0 )) || die_help "Finished parsing the command line arguments, yet still found the following arguments remaining: $(quote_args "$@")."
 [[ -v expr_type ]] || die_help "At least a file, attribute, expression, or URL should have been given."
 
 die_no_raw_output() {
@@ -453,7 +475,8 @@ args_nix="{
 printf '%s\n' "$( [[ -v fetcher ]] && printf '%s\n' "$fetcher" || echo null )" > "$XDG_RUNTIME_DIR/nix-prefetch/fetcher.nix"
 
 fetcher_autocomplete() {
-  out=$(nix_call 'fetcherAutocomplete' --raw '(
+  nix_call 'fetcherAutocomplete'
+  out=$(nix_eval --raw '(
     with prelude;
     with import '"$lib"'/fetcher.nix { inherit prelude pkgs expr index fetcher; };
     concatMapStrings (arg: "--${arg}\n") (attrNames (functionArgs fetcher))
@@ -468,10 +491,8 @@ fetcher_help() {
     between && $1 == "nix-prefetch" { exit }
     between { print "  " substr($0, RLENGTH + 1) }
   ')
-  nix_call 'fetcherHelp' --raw "(
-    with import $lib/fetcher.nix { inherit prelude pkgs expr index fetcher; };
-    import $lib/fetcher-help.nix { inherit prelude pkgs pkg fetcher; usage = $(nix_str "$usage"); }
-  )"
+  nix_call 'fetcherHelp'
+  nix_eval_prefetcher --raw "import $lib/fetcher-help.nix { inherit prelude pkgs pkg fetcher; usage = $(nix_str "$usage"); }"
 }
 
 die_require_file() {
@@ -521,38 +542,53 @@ EOF
 }
 
 compute_hash_builtin() {
-  capture_err nix_eval --raw "(
-    with import $lib/fetcher.nix { inherit prelude pkgs expr index fetcher; };
-    with import $lib/prefetcher.nix { inherit prelude pkgs pkg fetcher fetcherArgs hashAlgo hash fetchURL; };
-    prefetcher.drv
-  )" && issue_no_hash_mismatch || hash_from_err
+  capture_err nix_eval_prefetcher --raw 'prefetcher.drv' && issue_no_hash_mismatch || hash_from_err
 }
 
 compute_hash_generic() {
-  # Try to determine whether the current hash is already valid,
-  # so that we do not have to fetch the sources unnecessarily.
-  if (( ! force )); then
-    # Due to `nix-store --query --deriver` not giving back anything useful (see: https://github.com/NixOS/nix/issues/2631),
-    # the only approximiation of whether a hash is already valid is to check if its been rooted in the Nix store.
-    # The assumption being made here is that you won't keep a package with an outdated hash rooted in the Nix store,
-    # i.e. you won't keep an updated package with an oudated source installed.
-    outputs=$(while IFS= read -r p; do [[ -e $p ]] && printf '%s\n' "$p"; done < <(nix-store --query --outputs $(nix-store --query --referrers "$drv_path")))
-    [[ -n $outputs ]] && while IFS= read -r root; do
+  # Should the Nix store be checked whether the output path of the fetcher produced derivation already exists.
+  if (( check_store )); then
+    # This check would have been easy if `nix-store --query --deriver` would have returned the actual derivation
+    # responsible for building it, but it does not: https://github.com/NixOS/nix/issues/2631
+    # So instead the following approximation will have to do:
+    local drvs outputs
+
+    # Are there any derivations in the Nix store that refer to the fetcher produced derivation?
+    drvs=$(nix-store --query --referrers "$drv_path")
+
+    # What output paths do these derivations produce?
+    outputs=$(nix-store --query --outputs $drvs)
+
+    # We have to check for non-emptiness, otherwise the while loop will process the empty string as a path.
+    # What of these output paths actually exist in the Nix store?
+    [[ -n $outputs ]] && outputs=$( while IFS= read -r p; do [[ -e $p ]] && printf '%s\n' "$p"; done <<< "$outputs" )
+
+    # Checking for roots is the slowest command of all, even without arguments,
+    # so we first check if there were any output paths that exist.
+    # Are there any roots to the output paths, i.e. are they considered installed?
+    [[ -n $outputs ]] && roots=$(nix-store --query --roots $outputs)
+
+    # Again first check for non-emptiness, otherwise the check would succeed for the empty string,
+    # as the basename of it is still the empty string, which is not equal to 'result'.
+    # We ignore 'result' roots, because they are generally the produced by calling `nix-build`,
+    # so it could happen that a package with an updated version but outdated hash would be build with it,
+    # producing false positives for the checks being done so far.
+    [[ -n $roots ]] && while IFS= read -r root; do
       if [[ $(basename "$root") != result ]]; then
+        # There is something installed that used the same derivation as produced by the fetcher,
+        # so we can be confident that the hash passed to the fetcher was already valid.
         actual_hash=$expected_hash
         return
       fi
-    done < <(nix-store --query --roots $outputs)
+    done <<< "$roots"
   fi
+
   capture_err nix-store --quiet --realize "$wrong_drv_path" && issue_no_hash_mismatch || hash_from_err
 }
 
 prefetch() {
-  out=$(nix_call 'prefetch' --json "(
-    with import $lib/fetcher.nix { inherit prelude pkgs expr index fetcher; };
-    with import $lib/prefetcher.nix { inherit prelude pkgs pkg fetcher fetcherArgs hashAlgo hash fetchURL; };
-    json
-  )" --option allow-unsafe-native-code-during-evaluation true) || exit
+  nix_call 'prefetch'
+  out=$(nix_eval_prefetcher --json 'json' --option allow-unsafe-native-code-during-evaluation true) || exit
 
   if ! vars=$(jq --raw-output '.bash_vars | to_entries | .[] | .key + "=" + .value' <<< "$out"); then
     [[ -n $out ]] && printf '%s\n' "$out" >&2
@@ -582,7 +618,9 @@ prefetch() {
   fi
 
   if (( check_hash )) && [[ $expected_hash != "$actual_hash" ]]; then
-    die "$(printf "A hash mismatch occurred for the fixed-output derivation output %s:\n  expected: %s\n    actual: %s" "$output" "$expected_hash" "$actual_hash")"
+    die "A hash mismatch occurred for the fixed-output derivation output $output:
+  expected: $expected_hash
+    actual: $actual_hash"
   fi
 
   [[ $output_type == raw ]] || json=$(jq --raw-output '.fetcher_args | .'"$hash_algo"' = "'"$actual_hash"'"' <<< "$out")
@@ -595,11 +633,7 @@ prefetch() {
 
   if (( print_path )); then
     if [[ $fetcher == builtins.* ]] && (( ! use_nix_prefetch_url )); then
-      output=$(nix_eval --raw "(
-        with import $lib/fetcher.nix { inherit prelude pkgs expr index fetcher; };
-        with import $lib/prefetcher.nix { inherit prelude pkgs pkg fetcher fetcherArgs hashAlgo hash fetchURL; };
-        prefetcher.drv
-      )") || exit
+      output=$(nix_eval_prefetcher --raw 'prefetcher.drv') || exit
     fi
     printf '%s\n' "$output"
   fi

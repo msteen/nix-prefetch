@@ -55,7 +55,7 @@ Features
 
 * Boolean fetcher arguments can be given as flags, so you can do `--showURLs` or `--no-showURLs` rather than `--showURLs --expr true` or `--showURLs --expr false`, respectively.
 
-* Will not redownload the source if you already have something installed that uses the source, unless `--force` is given.
+* When the `--check-store` option has been given, it will not redownload the source if you already have something installed that uses the source.
 
 Limitations
 ---
@@ -82,7 +82,6 @@ Limitations
 
 Examples
 ---
-
 A package source:
 ```
 $ nix-prefetch hello.src
@@ -124,7 +123,7 @@ trying http://ftpmirror.gnu.org/hello/hello-2.10.tar.gz
   % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
                                  Dload  Upload   Total   Spent    Left  Speed
   0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0
-100  708k  100  708k    0     0  1498k      0 --:--:-- --:--:-- --:--:-- 1498k
+100  708k  100  708k    0     0  1836k      0 --:--:-- --:--:-- --:--:-- 1836k
 
 0ssi1wpaf7plaswqqjwigppsg5fyh99vdlb9kzl7c9lng89ndq1i
 ```
@@ -159,7 +158,7 @@ The fetcher will be called as follows:
 >   patches = [  ];
 >   sha256 = "0sjjj9z1dhilhpc8pq4154czrb79z9cm044jvn75kxcjv6v5l2m5";
 >   sourceRoot = null;
->   src = /nix/store/bscncp1f7y0zakkx6h3ayxxd2zkcgk45-nix-prefetch-0.2.0/contrib/hello_rs;
+>   src = /nix/store/lwjqbhfln0x6plmwbjjfpvc4plxmq819-nix-prefetch-0.1.0/contrib/hello_rs;
 >   srcs = null;
 > }
 
@@ -227,7 +226,7 @@ Usage:
                [(-f | --file) <file>] [--fetchurl]
                [(-t | --type | --hash-algo) <hash-algo>] [(-h | --hash) <hash>]
                [--input <input-type>] [--output <output-type>] [--print-urls] [--print-path]
-               [--compute-hash] [--force] [-s | --silent] [-q | --quiet] [-v | --verbose] [-vv | --debug] ...
+               [--compute-hash] [--check-store] [-s | --silent] [-q | --quiet] [-v | --verbose] [-vv | --debug] ...
                ([-f | --file] <file> | [-A | --attr] <attr> | [-E | --expr] <expr> | <url>) [<hash>]
                [--] [--<name> ((-f | --file) <file> | (-A | --attr) <attr> | (-E | --expr) <expr> | <str>) | --autocomplete | --help] ...
 

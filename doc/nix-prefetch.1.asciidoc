@@ -15,7 +15,7 @@ nix-prefetch - Prefetch any fetcher function call, e.g. package sources
               [(*-f* | *--file*) <file>] [*--fetchurl*]
               [(*-t* | *--type* | *--hash-algo*) <hash-algo>] [(*-h* | *--hash*) <hash>]
               [*--input* <input-type>] [*--output* <output-type>] [*--print-urls*] [*--print-path*]
-              [*--compute-hash*] [*--force*] [*-s* | *--silent*] [*-q* | *--quiet*] [*-v* | *--verbose*] [*-vv* | *--debug*] ...
+              [*--compute-hash*] [*--check-store*] [*-s* | *--silent*] [*-q* | *--quiet*] [*-v* | *--verbose*] [*-vv* | *--debug*] ...
               ([*-f* | *--file*] <file> | [*-A* | *--attr*] <attr> | [*-E* | *--expr*] <expr> | <url>) [<hash>]
               [*--*] [*--<name>* ((*-f* | *--file*) <file> | (*-A* | *--attr*) <attr> | (*-E* | *--expr*) <expr> | <str>) | *--autocomplete* | *--help*] ...
  *nix-prefetch* [(*-f* | *--file*) <file>] [*--deep*] [*-s* | *--silent*] [*-v* | *--verbose*] [*-vv* | *--debug*] ... (*-l* | *--list*)
@@ -70,7 +70,7 @@ and can placed both before and after the parameters.
     Lines of name/value pairs separated by an '=' (equals) sign.
 
 *--output* <output-type>::
-  Specify what type of output should be written to 'stdout'. The following types are available:
+  Specify what type of output should be written to 'stdout' [*default*: 'raw']. The following types are available:
 
   'expr';;
     Output a Nix expression, that once evaluated, will result in an attribute set containing the original fetcher,
@@ -90,16 +90,18 @@ and can placed both before and after the parameters.
     The output hash and, if the *--print-path* option is passed, the output path as well.
 
 *--print-urls*::
-  Print the URLs fetched as part of the derivation. Only applicable to *--output* 'raw' (which is the default output type).
+  Print the URLs fetched as part of the derivation. Only applicable to *--output* 'raw'.
 
 *--print-path*::
-  Print the output path of the resulting derivation. Only applicable to *--output* 'raw' (which is the default output type).
+  Print the output path of the resulting derivation. Only applicable to *--output* 'raw'.
 
 *--compute-hash*::
-  Whether to compute the hash.
+  Whether to compute the hash [*default*: 'true'].
 
-*--force*::
-  Always redetermine the hash, even if the given hash is already determined to be valid.
+*--check-store*::
+  Check whether the Nix store already contains the output path of the resulting derivation.
+  This can be an useful optimization when 'nix-prefetch' is used in automated update scripts,
+  which might try and prefetch things that have not actually been updated and are already installed on the system.
 
 *--autocomplete*::
   List the arguments that can be passed to the fetcher function.
