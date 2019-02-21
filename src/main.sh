@@ -476,14 +476,6 @@ args_nix="{
   fetchURL = $(nix_bool "$fetchurl");
 }"
 
-[[ $output_type == expr ]] && printf '%s\n' "(
-  with $(awk 'NR > 1 { printf "  " } { print }' <<< "$args_nix");
-  with import $lib/pkgs.nix nixpkgsPath;
-  with import $lib/fetcher.nix { inherit prelude pkgs expr index fetcher; };
-  with import $lib/prefetcher.nix { inherit prelude pkgs pkg fetcher fetcherArgs hashAlgo hash fetchURL; };
-  { inherit pkgs fetcher prefetcher; }
-)" && exit
-
 printf '%s\n' "$( [[ -v fetcher ]] && printf '%s\n' "$fetcher" || echo null )" > "$XDG_RUNTIME_DIR/nix-prefetch/fetcher.nix"
 
 fetcher_autocomplete() {
@@ -623,7 +615,11 @@ prefetch() {
   use_nix_prefetch_url=0
   if (( compute_hash )); then
     (( check_store )) && compute_hash_store || {
-      (( verbose )) && printf 'The following URLs will be fetched as part of the source:\n%s\n\n' "$(jq --raw-output '.urls[]' <<< "$out")" >&2
+      if (( verbose )); then
+        local urls
+        urls=$(jq --raw-output '.urls[]' <<< "$out") || exit
+        [[ -n $urls ]] && printf 'The following URLs will be fetched as part of the source:\n%s\n\n' "$urls" >&2
+      fi
       if (( use_nix_prefetch_url )); then
         compute_hash_nix_prefetch_url
       elif [[ $fetcher == builtins.* ]]; then
@@ -641,6 +637,20 @@ prefetch() {
   expected: ${expected_hash}
     actual: ${actual_hash}"
   fi
+
+  [[ $output_type == expr ]] && printf '%s\n' "(
+  with $(awk 'NR > 1 { printf "  " } { print }' <<< "$args_nix");
+  with import $lib/pkgs.nix nixpkgsPath;
+  with import $lib/fetcher.nix { inherit prelude pkgs expr index fetcher; };
+  with import $lib/prefetcher.nix { inherit prelude pkgs pkg fetcher fetcherArgs hashAlgo hash fetchURL; };
+  {
+    inherit pkgs fetcher;
+    prefetcher = prefetcher // rec {
+      args = prefetcher.args // { ${hash_algo} = \"${actual_hash}\"; };
+      drv = prefetcher args;
+    };
+  }
+)" && exit
 
   [[ $output_type == raw ]] || json=$(jq --raw-output '.fetcher_args | .'"$hash_algo"' = "'"$actual_hash"'"' <<< "$out")
   case $output_type in
