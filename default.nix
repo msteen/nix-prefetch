@@ -1,15 +1,22 @@
-{ stdenv, makeWrapper
+{ stdenv, callPackage, fetchFromGitHub, makeWrapper
 , asciidoc, docbook_xml_dtd_45, docbook_xsl, libxml2, libxslt
 , coreutils, gawk, gnugrep, gnused, jq, nix }:
 
 with stdenv.lib;
+
+with callPackage (fetchFromGitHub {
+  owner = "siers";
+  repo = "nix-gitignore";
+  rev = "cc962a73113dbb32407d5099c4bf6f7ecf5612c9";
+  sha256 = "08mgdnb54rhsz4024hx008dzg01c7kh3r45g068i7x91akjia2cq";
+}) { };
 
 stdenv.mkDerivation rec {
   name = "${pname}-${version}";
   pname = "nix-prefetch";
   version = "0.1.0";
 
-  src = ./.;
+  src = gitignoreSource [ ".git" ] ./.;
 
   nativeBuildInputs = [
     makeWrapper

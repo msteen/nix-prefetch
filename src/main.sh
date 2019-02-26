@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2015 disable=SC2030 disable=SC2031
 
 # Tested succesfully with:
 # set -euxo pipefail
@@ -26,9 +27,14 @@ exit_script() {
   kill -SIGHUP -- "$pid"
 }
 
-die() {
+exit_with_error() {
+  local ret=$1; shift
   (( ! silent )) && printf 'error: %s\n' "$*" >&2
-  exit_script 1
+  (( ret )) && exit_script "$ret" || exit_script 1
+}
+
+die() {
+  exit_with_error $? "$@"
 }
 
 # Allow the source to be used directly when developing.
@@ -43,9 +49,10 @@ if [[ $lib == '@''lib''@' ]]; then
   esac
 fi
 
-die_help() {
+die_usage() {
+  local ret=$?
   (( ! quiet )) && { show_usage; printf '\n'; } >&2
-  die "$@"
+  exit_with_error $ret "$@"
 }
 
 issue() {
@@ -54,6 +61,7 @@ issue() {
 }
 
 quote() {
+  # shellcheck disable=SC1003
   grep -q '^[a-zA-Z0-9_\.-]\+$' <<< "$*" && printf '%s' "$*" || printf '%s' "'${*//'/\\'}'"
 }
 
@@ -65,7 +73,7 @@ quote_args() {
 
 # https://stackoverflow.com/questions/6570531/assign-string-containing-null-character-0-to-a-variable-in-bash
 quote_nul() {
-  sed 's/\\/\\\\/g;s/\x0/\\0/g'
+  sed 's/\\/\\\\/g;s/\x0/\\x00/g'
 }
 
 unquote_nul() {
@@ -92,6 +100,7 @@ print_assign() {
 }
 
 print_vars() {
+  # shellcheck disable=SC2048
   for var in $*; do
     [[ -v $var ]] && print_assign "$var" "${!var}"
   done
@@ -121,7 +130,7 @@ nix_typed() {
     attr) value="pkgs: with pkgs; let inherit (pkgs) builtins; in (${raw}); name = $(nix_str "$raw")";;
     expr) value="pkgs: with pkgs; let inherit (pkgs) builtins; in (${raw})";;
      str) value=$(nix_str "$raw");;
-       *) die_help "Unsupported expression type '${type}'.";;
+       *) die_usage "Unsupported expression type '${type}'.";;
   esac
   printf '{ type = "%s"; value = %s; }' "$type" "$value"
 }
@@ -178,11 +187,11 @@ nix_call() {
 ## ##
 
 die_extra_param() {
-  die_help "An unexpected extra parameter '${1}' has been given."
+  die_usage "An unexpected extra parameter '${1}' has been given."
 }
 
 die_option_param() {
-  die_help "The option '${arg}' needs a parameter."
+  die_usage "The option '${arg}' needs a parameter."
 }
 
 show_usage() {
@@ -192,14 +201,6 @@ show_usage() {
     between == 1 { match($0, /^ */); between=2 }
     between && ! /^[[:space:]]*$/ { print "  " substr($0, RLENGTH + 1) }
   '
-}
-
-show_help() {
-  man nix-prefetch
-}
-
-show_version() {
-  printf '%s\n' "$version"
 }
 
 handle_common() {
@@ -242,16 +243,16 @@ handle_common() {
 (( $# == 1 )) &&
 case $1 in
   --help)
-    show_help
+    man nix-prefetch
     exit
     ;;
   --version)
-    show_version
+    printf '%s\n' "$version"
     exit
     ;;
 esac
 
-for var in $(echo 'silent quiet verbose debug'); do declare "${var}=0"; done
+silent=0; quiet=0; verbose=0; debug=0
 
 # We need to be able to differentiate the remaining commands,
 # because they will have different arguments available to them.
@@ -294,8 +295,7 @@ expr_type=
 input_type=
 output_type=raw
 declare -A fetcher_args
-for var in $(echo 'fetchurl print_urls print_path check_store autocomplete help param_count'); do declare "${var}=0"; done
-compute_hash=1
+fetchurl=0; print_urls=0; print_path=0; compute_hash=1; check_store=0; autocomplete=0; help=0; param_count=0
 while (( $# >= 1 )); do
   arg=$1; shift
   param=
@@ -443,8 +443,12 @@ if (( debug )); then
   echo >&2
 fi
 
-(( $# == 0 )) || die_help "Finished parsing the command line arguments, yet still found the following arguments remaining: $(quote_args "$@")."
-[[ -n $expr_type ]] || die_help "At least a file, attribute, expression, or URL should have been given."
+(( $# == 0 )) || die_usage "Finished parsing the command line arguments, yet still found the following arguments remaining: $(quote_args "$@")."
+[[ -n $expr_type ]] || die_usage "At least a file, attribute, expression, or URL should have been given."
+
+## ##
+## Main commands
+## ##
 
 die_no_raw_output() {
   die "The $1 option only works with the default raw output."
@@ -480,6 +484,7 @@ printf '%s\n' "$( [[ -v fetcher ]] && printf '%s\n' "$fetcher" || echo null )" >
 
 fetcher_autocomplete() {
   nix_call 'fetcherAutocomplete'
+  # shellcheck disable=SC2016
   out=$(nix_eval --raw "(
     with prelude;
     with import $lib/fetcher.nix { inherit prelude pkgs expr index fetcher; };
@@ -534,6 +539,7 @@ compute_hash_store() {
   drvs=$(nix-store --query --referrers "$drv_path")
 
   # What output paths do these derivations produce?
+  # shellcheck disable=SC2086
   outputs=$(nix-store --query --outputs $drvs)
 
   # We have to check for non-emptiness, otherwise the while loop will process the empty string as a path.
@@ -543,6 +549,7 @@ compute_hash_store() {
   # Checking for roots is the slowest command of all, even without arguments,
   # so we first check if there were any output paths that exist.
   # Are there any roots to the output paths, i.e. are they considered installed?
+  # shellcheck disable=SC2086
   [[ -n $outputs ]] && roots=$(nix-store --query --roots $outputs)
 
   # Again first check for non-emptiness, otherwise the check would succeed for the empty string,
@@ -601,6 +608,7 @@ prefetch() {
     [[ -n $out ]] && printf '%s\n' "$out" >&2
     issue "The Nix code was unable to produce valid JSON."
   fi
+  fetcher=; hash_algo=; expected_hash=; actual_hash_size=; check_hash=; hash_support=; drv_path=; wrong_drv_path=; output=
   while IFS= read -r var; do declare "$var"; done <<< "$vars"
   print_bash_vars "$(jq --raw-output '.bash_vars | keys | join(" ")' <<< "$out")"
 
@@ -654,7 +662,7 @@ prefetch() {
 
   [[ $output_type == raw ]] || json=$(jq --raw-output '.fetcher_args | .'"$hash_algo"' = "'"$actual_hash"'"' <<< "$out")
   case $output_type in
-    nix) nix-instantiate --eval --strict --expr '{ json }: builtins.fromJSON json' --argstr json "$json";;
+    nix) nix-instantiate --eval --strict --expr '{ json }: builtins.fromJSON json' --argstr json "$json" | sed 's/^{ /{\n  /;s/; /;\n  /g;s/  }$/}/';;
     json) printf '%s\n' "$json";;
     shell) jq --join-output 'to_entries | .[] | .key + "=" + .value + "\u0000"' <<< "$json";;
     raw) printf '%s\n' "$actual_hash";;
