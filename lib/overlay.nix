@@ -6,12 +6,7 @@ let
 
 in with import ./prelude.nix;
 
-{
-  builtins = customBuiltins;
-
-  # The builtin is also available outside of `builtins`.
-  inherit (customBuiltins) fetchTarball;
-
+builtinsOverlay // {
   hello_rs = callPackage (if pathExists ../../contrib
     then ../../contrib/hello_rs # lib/nix-prefetch
     else    ../contrib/hello_rs # lib
@@ -49,9 +44,9 @@ in with import ./prelude.nix;
   # so we need to get a hold of an unaltered version of the package.
   cacert = (import super.path { overlays = []; }).cacert;
 
-  fetcherSuperPkgs = super // genAttrs [ "fetchipfs" "fetchurl" ] (name: curlFetcher super.${name});
+  fetcherSuperPkgs = super // builtinsOverlay // genAttrs [ "fetchipfs" "fetchurl" ] (name: curlFetcher super.${name});
 
-in genFetcherOverlay fetcherSuperPkgs (topLevelFetchers ++ optional (fetcher.type or null == "attr") fetcher.name) // {
+in genFetcherOverlay fetcherSuperPkgs (primitiveFetchers ++ topLevelFetchers ++ optional (fetcher.type or null == "attr") fetcher.name) // {
   bazaar = wrapInsecureArgBin super.bazaar "bzr" "-Ossl.cert_reqs=none";
   mercurial = wrapInsecureArgBin super.mercurial "hg" "--insecure";
   subversion = wrapInsecureArgBin super.mercurial "svn" "--trust-server-cert";

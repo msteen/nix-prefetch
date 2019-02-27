@@ -10,3 +10,5 @@
 ✔ Print path fails for non-hash builtin fetchers. @done (2/17/2019, 9:03:17 PM)
 ✔ The security curlOpts should not show up in the returned fetcher arguments. @done (2/18/2019, 4:29:05 PM)
 ✔ Package sources that use the fetchFromGitHub fetcher should not fail on the rev attribute missing. @done (2/19/2019, 2:03:58 PM)
+☐ --output expr does not work properly because the overlay used in nix-prefetch is not present.
+✔ calling import breaks using file based fetchers. @done (2/27/2019, 9:47:04 PM)

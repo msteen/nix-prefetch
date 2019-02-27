@@ -123,12 +123,13 @@ nix_str() {
   printf '%s' "${str//\$/\\\$}"
 }
 
+nix_expr_scope='pkgs: with pkgs.lib; with pkgs; let inherit (pkgs) builtins; inherit (builtins) fetchTarball import; in'
 nix_typed() {
   local type=$1 raw=$2
   case $type in
     file) value="(${raw})";;
-    attr) value="pkgs: with pkgs; let inherit (pkgs) builtins; in (${raw}); name = $(nix_str "$raw")";;
-    expr) value="pkgs: with pkgs; let inherit (pkgs) builtins; in (${raw})";;
+    attr) value="$nix_expr_scope (${raw}); name = $(nix_str "$raw")";;
+    expr) value="$nix_expr_scope (${raw})";;
      str) value=$(nix_str "$raw");;
        *) die_usage "Unsupported expression type '${type}'.";;
   esac
@@ -284,7 +285,7 @@ for arg in "$@"; do
       nix_call 'listFetchers'
       nix_eval --raw "(
         with prelude;
-        lines (import $lib/list-fetchers.nix { inherit prelude pkgs deep; })
+        lines (listFetchers pkgs deep)
       )"
       exit
     ;;

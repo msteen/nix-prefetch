@@ -20,23 +20,30 @@ in let prelude = with prelude; import ./lib.nix // {
 
   # To support builtin fetchers like any other, they too should be in the package set.
   # To fix `functionArgs` for the builtin fetcher functions, we need to wrap them via `setFunctionArgs`.
-  customBuiltins = mapAttrs (name: x:
-    if builtinFunctionArgs ? ${name}
-    then setFunctionArgs x builtinFunctionArgs.${name}
-    else x
-  ) builtins // { recurseForDerivations = true; };
+  builtinsOverlay =
+    let
+      fixedFunctionArgsBuiltins = mapAttrs (name: x:
+        if builtinFunctionArgs ? ${name}
+        then setFunctionArgs x builtinFunctionArgs.${name}
+        else x
+      ) builtins // { recurseForDerivations = true; };
+    in {
+      builtins = fixedFunctionArgsBuiltins;
+
+      # The builtin is also available outside of `builtins`.
+      inherit (fixedFunctionArgsBuiltins) fetchTarball;
+    };
 
   # Using `scopedImport` is rather slow. On my machine prefetching hello went from roughly 600ms to roughly 1200ms,
   # which is why its only used when all other attempts of determining the fetcher's source have failed.
   scopedNixpkgsImport = path: config:
     let
-      pkgs = customImport path config;
-      customImport = scopedImport {
+      pkgs = recursiveUpdate (customImport path config) { builtins.import = customImport; };
+      customImport = scopedImport (builtinsOverlay // {
         import = path: if isFetcherPath path || fetcher.type or null == "file" && path == fetcher.value
           then importFetcher path
           else customImport path;
-        builtins = customBuiltins;
-      };
+      });
     in pkgs;
 
   # Due to files like `pkgs/development/compilers/elm/fetchElmDeps.nix`,
@@ -70,16 +77,17 @@ in let prelude = with prelude; import ./lib.nix // {
   # Generate an attribute set that will be used to overlay the given fetcher functions.
   # The new fetcher functions will return an attribute set represeting a call to the original fetcher function.
   genFetcherOverlay = pkgs: names:
-    let genFetcher = name:
-      let path = splitString "." name;
-      in setAttrByPath path (markFetcher {
+    let
+      paths = map (name: splitString "." name) names;
+      genFetcher = name: path: setAttrByPath path (markFetcher {
         type = "attr";
         inherit name;
         fetcher = getAttrFromPath path pkgs;
       });
-    in zipAttrsWith (name: values: head values) (map genFetcher names);
+      orig = genAttrs (concatMap (path: take 1 (init path)) paths) (name: pkgs.${name});
+    in foldl' recursiveUpdate orig (zipListsWith genFetcher names paths);
 
-  primitiveFetchers = map (name: "builtins.${name}") (filter isFetcher (attrNames builtins)) ++ [ "fetchurlBoot" ];
+  primitiveFetchers = listFetchers builtinsOverlay true ++ [ "fetchurlBoot" ];
 
   markFetcher = { type, name, fetcher }:
     let
@@ -121,6 +129,17 @@ in let prelude = with prelude; import ./lib.nix // {
     else { success = false; value = null; };
 
   tryCallPackage = pkgs: x: let call = attemptCallPackage pkgs x; in if call.success then call.value else x;
+
+  listFetchers = pkgs: deep:
+    let
+      recur = parents: pkgs:
+        concatLists (mapAttrsToList (name: x:
+          let names = parents ++ [ name ];
+          in if isFetcher name && isFunction x then [ (concatStringsSep "." names) ]
+          else if deep && isRecursable x then recur names x
+          else []
+        ) pkgs);
+    in recur [] pkgs;
 
   builtinFunctionArgs =
     mapAttrs (_: value: { name = true; } // value) (mapAttrs (_: value: {
