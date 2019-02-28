@@ -1,4 +1,4 @@
-{ prelude, pkgs, pkg, fetcher, fetcherArgs, hashAlgo, hash, fetchURL }@orig:
+{ prelude, pkgs, pkg, fetcher, fetcherArgs, hashAlgo, hash, fetchURL, forceHTTPS }@orig:
 
 with prelude;
 
@@ -46,10 +46,13 @@ let
 
   prefetcherArgs =
     let args = removeAttrs fetcher.args hashAlgos // fetcherArgs // fetcherHashArg;
-    in args // optionalAttrs (fetcherFunctionArgs ? rev && args.rev or "" == "") (
+    in args
+    // optionalAttrs (fetcherFunctionArgs ? rev && args.rev or "" == "") (
       if fetcher.name == "fetchFromGitHub" && args ? owner && args ? repo then fetcherRevArg (fetcher (prefetcherArgs // { fetchSubmodules = true; })).url
       else if args ? url && hasSuffix ".git" args.url then fetcherRevArg args.url
-      else {});
+      else {})
+    // optionalAttrs (forceHTTPS && args ? url) { url = toHTTPS args.url; }
+    // optionalAttrs (forceHTTPS && args ? urls) { urls = map toHTTPS args.urls; };
 
   urls =
     let src = fetcher prefetcherArgs;

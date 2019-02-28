@@ -12,15 +12,17 @@ The fetcher will be called as follows:
 
 A package without a hash defined:
 ```
-$ nix-prefetch test 
-The package test-0.1.0 will be fetched as follows:
+$ nix-prefetch '{ stdenv, fetchurl }: stdenv.mkDerivation rec {
+                name = "test";
+                src = fetchurl { url = http://ftpmirror.gnu.org/hello/hello-2.10.tar.gz; };
+              }' 
+The package test will be fetched as follows:
 > fetchurl {
->   name = "foo";
 >   sha256 = "0000000000000000000000000000000000000000000000000000";
->   url = "https://gist.githubusercontent.com/msteen/fef0b259aa8e26e9155fa0f51309892c/raw/112c7d23f90da692927b76f7284c8047e50fdc14/test.txt";
+>   url = "https://ftpmirror.gnu.org/hello/hello-2.10.tar.gz";
 > }
 
-0jsvhyvxslhyq14isbx2xajasisp7xdgykl0dffy3z1lzxrv51kb
+0ssi1wpaf7plaswqqjwigppsg5fyh99vdlb9kzl7c9lng89ndq1i
 ```
 
 A package checked to already be in the Nix store thats not installed:
@@ -35,11 +37,11 @@ The package hello-2.10 will be fetched as follows:
 The following URLs will be fetched as part of the source:
 mirror://gnu/hello/hello-2.10.tar.gz
 
-trying http://ftpmirror.gnu.org/hello/hello-2.10.tar.gz
+trying https://ftpmirror.gnu.org/hello/hello-2.10.tar.gz
   % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
                                  Dload  Upload   Total   Spent    Left  Speed
   0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0
-100  708k  100  708k    0     0  1822k      0 --:--:-- --:--:-- --:--:-- 1822k
+100  708k  100  708k    0     0  1047k      0 --:--:-- --:--:-- --:--:-- 1047k
 
 0ssi1wpaf7plaswqqjwigppsg5fyh99vdlb9kzl7c9lng89ndq1i
 ```
@@ -53,13 +55,28 @@ The package git-minimal-2.18.1 will be fetched as follows:
 >   url = "https://www.kernel.org/pub/software/scm/git/git-2.18.1.tar.xz";
 > }
 
+The following URLs will be fetched as part of the source:
+https://www.kernel.org/pub/software/scm/git/git-2.18.1.tar.xz
+
+trying https://www.kernel.org/pub/software/scm/git/git-2.18.1.tar.xz
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+100   178  100   178    0     0   1424      0 --:--:-- --:--:-- --:--:--  1424
+100 4983k  100 4983k    0     0  10.1M      0 --:--:-- --:--:-- --:--:-- 24.4M
+
 1dlq120c9vmvp1m9gmgd6m609p2wkgfkljrpb0i002mpbjj091c8
 ```
 
 Modify the Git revision of a call to `fetchFromGitHub`:
 ```
-$ nix-prefetch openraPackages.engines.bleed --fetch-url --rev master 
-error: undefined variable 'openraPackages' at (string):4:85
+$ nix-prefetch openraPackages.engines.bleed --fetchurl --rev master 
+The package openra-bleed-9c9cad1 will be fetched as follows:
+> fetchurl {
+>   sha256 = "0100p7wrnnlvkmy581m0gbyg3cvi4i1w3lzx2gq91ndz1sbm8nd2";
+>   url = "https://github.com/OpenRA/OpenRA/archive/master.tar.gz";
+> }
+
+0sj8ac3vm8dwxzr7krq4gz4pdmzbiv31q20ca17jyzn0sxfddr81
 ```
 
 Hash validation:
@@ -86,7 +103,7 @@ The fetcher will be called as follows:
 >   patches = [  ];
 >   sha256 = "0sjjj9z1dhilhpc8pq4154czrb79z9cm044jvn75kxcjv6v5l2m5";
 >   sourceRoot = null;
->   src = /nix/store/bydfinrwqxapxa9fyky9djq8v0mr9xkw-nix-prefetch-0.1.0/contrib/hello_rs;
+>   src = /nix/store/qbnf8r6y26z7865milkz7dsmq6z0aqps-nix-prefetch-0.1.0/contrib/hello_rs;
 >   srcs = null;
 > }
 
@@ -151,12 +168,13 @@ Prefetch the fetchFromGitHub function call
 
 Usage:
   nix-prefetch fetchFromGitHub
-               [(-f | --file) <file>] [--fetchurl]
+               [(-f | --file) <file>] [--fetchurl] [--force-https]
                [(-t | --type | --hash-algo) <hash-algo>] [(-h | --hash) <hash>]
                [--input <input-type>] [--output <output-type>] [--print-urls] [--print-path]
                [--compute-hash] [--check-store] [-s | --silent] [-q | --quiet] [-v | --verbose] [-vv | --debug] ...
                ([-f | --file] <file> | [-A | --attr] <attr> | [-E | --expr] <expr> | <url>) [<hash>]
-               [--] [--<name> ((-f | --file) <file> | (-A | --attr) <attr> | (-E | --expr) <expr> | <str>) | --autocomplete | --help] ...
+               [--help | --autocomplete | --eval <expr>]
+               [--] [--<name> ((-f | --file) <file> | (-A | --attr) <attr> | (-E | --expr) <expr> | <str>)] ...
 
 Fetcher options (required):
   --owner
@@ -202,4 +220,3 @@ The package scilab-bin-6.0.1 will be fetched as follows:
 
 0fgjc2ak3b2qi6yin3fy50qwk2bcj0zbz1h4lyyic9n1n1qcliib
 ```
-

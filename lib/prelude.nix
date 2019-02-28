@@ -1,12 +1,8 @@
-let
-  fetcherPath = "${builtins.getEnv "XDG_RUNTIME_DIR"}/nix-prefetch/fetcher.nix";
-  fetcherDefined = builtins.pathExists fetcherPath;
-  origFetcher = if fetcherDefined then import fetcherPath else null;
+{ fetcher ? throw "Unknown fetcher.", forceHTTPS ? false }@orig:
 
-in let prelude = with prelude; import ./lib.nix // {
-  inherit fetcherDefined;
-  fetcher = if origFetcher == null || elem origFetcher.type [ "file" "attr" ]
-    then origFetcher
+let prelude = with prelude; import ./lib.nix // {
+  fetcher = if orig.fetcher == null || elem orig.fetcher.type [ "file" "attr" ]
+    then orig.fetcher
     else throw "Unsupported fetcher type '${type}'.";
 
   # The value is defined as a function to allow us to bring the `pkgs` attribute of Nixpkgs into scope,
@@ -140,6 +136,8 @@ in let prelude = with prelude; import ./lib.nix // {
           else []
         ) pkgs);
     in recur [] pkgs;
+
+  toHTTPS = url: if hasPrefix "http://" url then "https://${removePrefix "http://" url}" else url;
 
   builtinFunctionArgs =
     mapAttrs (_: value: { name = true; } // value) (mapAttrs (_: value: {

@@ -3,8 +3,10 @@ self: super:
 let
   inherit (super) callPackage;
   pkgs = self;
+  preludeArgsPath = "${builtins.getEnv "XDG_RUNTIME_DIR"}/nix-prefetch/prelude-args.nix";
+  preludeArgsGiven = builtins.pathExists preludeArgsPath;
 
-in with import ./prelude.nix;
+in with import ./prelude.nix (if preludeArgsGiven then import preludeArgsPath else {});
 
 builtinsOverlay // {
   hello_rs = callPackage (if pathExists ../../contrib
@@ -13,7 +15,7 @@ builtinsOverlay // {
   ) { };
 }
 
-// optionalAttrs fetcherDefined (let
+// optionalAttrs preludeArgsGiven (let
   wrapInsecureArgBin = pkg: name: insecureArg: pkgs.buildEnv {
     name = "secure-${name}";
     paths = [
@@ -44,7 +46,14 @@ builtinsOverlay // {
   # so we need to get a hold of an unaltered version of the package.
   cacert = (import super.path { overlays = []; }).cacert;
 
-  fetcherSuperPkgs = super // builtinsOverlay // genAttrs [ "fetchipfs" "fetchurl" ] (name: curlFetcher super.${name});
+  mirrorsPath = self.path + /pkgs/build-support/fetchurl/mirrors.nix;
+  mirrors = mapAttrs (_: map toHTTPS) (import mirrorsPath);
+  mirrorsImport = scopedImport {
+    import = path: if path == mirrorsPath then mirrors else mirrorsImport path;
+  };
+  mirrorsSuperPkgs = super // { inherit (mirrorsImport self.path { overlays = []; }) fetchurlBoot fetchurl; };
+
+  fetcherSuperPkgs = mirrorsSuperPkgs // builtinsOverlay // genAttrs [ "fetchipfs" "fetchurl" ] (name: curlFetcher mirrorsSuperPkgs.${name});
 
 in genFetcherOverlay fetcherSuperPkgs (primitiveFetchers ++ topLevelFetchers ++ optional (fetcher.type or null == "attr") fetcher.name) // {
   bazaar = wrapInsecureArgBin super.bazaar "bzr" "-Ossl.cert_reqs=none";

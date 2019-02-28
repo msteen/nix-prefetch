@@ -21,9 +21,9 @@ _nix_prefetch() {
   # Indenting with spaces is required to still make " $prev_word " work.
   local params='
     -f --file -A --attr -E --expr -i --index -F --fetcher
-    -t --type --hash-algo -h --hash --input --output '
+    -t --type --hash-algo -h --hash --input --output --eval '
   local flags=' -s --silent -q --quiet -v --verbose -vv --debug -l --list --version ' flag
-  for flag in --fetch-url --print-urls --print-path --compute-hash --check-store --autocomplete --help --deep; do
+  for flag in --fetchurl --force-https --print-urls --print-path --compute-hash --check-store --autocomplete --help --deep; do
     flags+=" --no-${flag#--} $flag "
   done
 
@@ -39,7 +39,7 @@ _nix_prefetch() {
       -A|--attr)
         _nix_prefetch_attrs "$curr_word"
         ;;
-      -E|--expr|-F|--fetcher)
+      -E|--expr|-F|--fetcher|--eval)
         _nix_prefetch_reply "$(compgen -f -- "$curr_word")"
         _nix_prefetch_attrs "$curr_word"
         ;;
@@ -52,7 +52,7 @@ _nix_prefetch() {
         _nix_prefetch_reply "$(compgen -W "$values" -- "$curr_word")"
         ;;
       --output)
-        local values='expr nix json shell raw'
+        local values='nix json shell raw'
         _nix_prefetch_reply "$(compgen -W "$values" -- "$curr_word")"
         ;;
     esac

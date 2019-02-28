@@ -162,7 +162,8 @@ nix_eval() {
   local nix=$1; shift
   nix eval "$output_type" "(
     with ${args_nix};
-    with import $lib/pkgs.nix nixpkgsPath;
+    let prelude = import $lib/prelude.nix { inherit fetcher forceHTTPS; }; in
+    let pkgs = import $lib/pkgs.nix { inherit prelude nixpkgsPath; }; in
     ${nix}
   )" "${nix_eval_args[@]}" "$@"
 }
@@ -172,7 +173,7 @@ nix_eval_prefetcher() {
   local nix=$1; shift
   nix_eval "$output_type" "(
     with import $lib/fetcher.nix { inherit prelude pkgs expr index fetcher; };
-    with import $lib/prefetcher.nix { inherit prelude pkgs pkg fetcher fetcherArgs hashAlgo hash fetchURL; };
+    with import $lib/prefetcher.nix { inherit prelude pkgs pkg fetcher fetcherArgs hashAlgo hash fetchURL forceHTTPS; };
     ${nix}
   )" "$@"
 }
@@ -292,11 +293,10 @@ for arg in "$@"; do
   esac
 done
 
-expr_type=
-input_type=
-output_type=raw
+expr_type=; input_type=; output_type=raw; eval=
+fetchurl=0; force_https=1; print_urls=0; print_path=0; compute_hash=1; check_store=0; autocomplete=0; help=0
 declare -A fetcher_args
-fetchurl=0; print_urls=0; print_path=0; compute_hash=1; check_store=0; autocomplete=0; help=0; param_count=0
+param_count=0
 while (( $# >= 1 )); do
   arg=$1; shift
   param=
@@ -310,7 +310,8 @@ while (( $# >= 1 )); do
     -h|--hash) param='hash';;
     --input) param='input_type';;
     --output) param='output_type';;
-    --?(no-)@(fetchurl|print-urls|print-path|compute-hash|check-store|autocomplete|help))
+    --eval) param='eval';;
+    --?(no-)@(fetchurl|force-https|print-urls|print-path|compute-hash|check-store|autocomplete|help))
       name=${arg#--}
       [[ $name == no-* ]] && name=${name#no-} && value=0 || value=1
       name=${name//-/_}
@@ -330,14 +331,6 @@ while (( $# >= 1 )); do
           fi
 
           name=${arg#--*}
-
-          case $arg in
-            --?(no-)@(autocomplete|help))
-              [[ $name == no-* ]] && name=${name#no-} && value=0 || value=1
-              declare "${name}=${value}"
-              ;;
-            *) false;;
-          esac && continue
 
           if (( $# == 0 )) || [[ ! $1 =~ ^(-f|--file|-A|--attr|-E|--expr)$ && $1 == -* ]]; then
             type='expr'
@@ -368,7 +361,7 @@ while (( $# >= 1 )); do
       fi
       if (( param_count == 0 )); then
         expr=$arg
-        if [[ $arg == *://* ]]; then
+        if [[ $arg =~ ^[a-zA-Z]+:// ]]; then
           expr_type='url'
         elif [[ $arg == */* && -e $arg || $arg == '<'* ]]; then
           expr_type='file'
@@ -394,7 +387,7 @@ done
 handle_common
 
 [[ $input_type =~ ^(|nix|json|shell)$ ]] || die "Unsupported input type '${input_type}'."
-[[ $output_type =~ ^(expr|nix|json|shell|raw)$ ]] || die "Unsupported output type '${output_type}'."
+[[ $output_type =~ ^(nix|json|shell|raw)$ ]] || die "Unsupported output type '${output_type}'."
 
 if [[ -v fetcher ]]; then
   [[ $fetcher == */* && -e $fetcher || $fetcher == '<'* ]] && type='file' || type='attr'
@@ -434,8 +427,8 @@ fi
 
 if (( debug )); then
   printf '%s\n' "$(print_bash_vars '
-    file expr index fetcher fetchurl hash hash_algo input_type output_type print_path print_urls
-    compute_hash check_store silent quiet verbose debug autocomplete help
+    file expr index fetcher fetchurl force_https hash hash_algo input_type output_type print_path print_urls
+    compute_hash check_store silent quiet verbose debug eval autocomplete help
   ' 2>&1)" >&2
   for name in "${!fetcher_args[@]}"; do
     value=${fetcher_args[$name]}
@@ -479,9 +472,13 @@ args_nix="{
   hashAlgo = $( [[ -v hash_algo ]] && nix_str "$hash_algo" || echo null );
   hash = $( [[ -v hash ]] && nix_str "$hash" || echo null );
   fetchURL = $(nix_bool "$fetchurl");
+  forceHTTPS = $(nix_bool "$force_https");
 }"
 
-printf '%s\n' "$( [[ -v fetcher ]] && printf '%s\n' "$fetcher" || echo null )" > "$XDG_RUNTIME_DIR/nix-prefetch/fetcher.nix"
+printf '%s\n' "{
+  fetcher = $( [[ -v fetcher ]] && printf '%s\n' "$fetcher" || echo null );
+  forceHTTPS = $(nix_bool "$force_https");
+}" > "$XDG_RUNTIME_DIR/nix-prefetch/prelude-args.nix"
 
 fetcher_autocomplete() {
   nix_call 'fetcherAutocomplete'
@@ -647,19 +644,16 @@ prefetch() {
     actual: ${actual_hash}"
   fi
 
-  [[ $output_type == expr ]] && printf '%s\n' "(
-  with $(awk 'NR > 1 { printf "  " } { print }' <<< "$args_nix");
-  with import $lib/pkgs.nix nixpkgsPath;
-  with import $lib/fetcher.nix { inherit prelude pkgs expr index fetcher; };
-  with import $lib/prefetcher.nix { inherit prelude pkgs pkg fetcher fetcherArgs hashAlgo hash fetchURL; };
-  {
-    inherit pkgs fetcher;
-    prefetcher = prefetcher // rec {
-      args = prefetcher.args // { ${hash_algo} = \"${actual_hash}\"; };
-      drv = prefetcher args;
-    };
-  }
-)" && exit
+  if [[ -n $eval ]]; then
+    nix_eval_prefetcher --raw "with builtins; with pkgs.lib; ($eval) {
+      inherit pkgs fetcher;
+      prefetcher = prefetcher // rec {
+        args = prefetcher.args // { ${hash_algo} = \"${actual_hash}\"; };
+        drv = prefetcher args;
+      };
+    }" --option allow-unsafe-native-code-during-evaluation true
+    exit
+  fi
 
   [[ $output_type == raw ]] || json=$(jq --raw-output '.fetcher_args | .'"$hash_algo"' = "'"$actual_hash"'"' <<< "$out")
   case $output_type in

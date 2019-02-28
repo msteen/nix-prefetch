@@ -13,7 +13,7 @@ let lib = builtins // import <nixpkgs/lib>; in with lib; lib // rec {
   isPath = x: typeOf x == "path" || isString x && hasPrefix "/" x;
   isRecursable = x: try (x.recurseForDerivations or false) false;
   isFetcher = name: name == "requireFile" || hasPrefix "fetch" name;
-  isFetcherPath = path: let name = baseNameOf path; in hasPrefix "fetch" name && hasSuffix ".nix" name && name != "fetcher.nix";
+  isFetcherPath = path: let name = baseNameOf path; in hasPrefix "fetch" name && hasSuffix ".nix" name;
   isSource = x: x ? outputHash && x ? outputHashMode && x ? outputHashAlgo;
   isPackage = x: isDerivation x && (x ? src || x ? srcs) && !(isSource x);
   try = x: default: let eval = tryEval x; in if eval.success then eval.value else default;

@@ -20,10 +20,10 @@ _nix_prefetch_attrs() {
 _nix_prefetch() {
   local params=(
     '-f' '--file' '-A' '--attr' '-E' '--expr' '-i' '--index' '-F' '--fetcher'
-    '-t' '--type' '--hash-algo' '-h' '--hash' '--input' '--output'
+    '-t' '--type' '--hash-algo' '-h' '--hash' '--input' '--output' '--eval'
   )
   local flags=( -s --silent -q --quiet -v --verbose -vv --debug -l --list --version ) flag
-  for flag in --fetch-url --print-urls --print-path --compute-hash --check-store --autocomplete --help --deep; do
+  for flag in --fetchurl --force-https --print-urls --print-path --compute-hash --check-store --autocomplete --help --deep; do
     flags+=( "--no-${flag#--}" "$flag" )
   done
 
@@ -51,7 +51,7 @@ _nix_prefetch() {
         _describe 'input-types' values
         ;;
       --output)
-        local values=( 'expr' 'nix' 'json' 'shell' 'raw' )
+        local values=( 'nix' 'json' 'shell' 'raw' )
         _describe 'output-types' values
         ;;
     esac

@@ -12,12 +12,13 @@ nix-prefetch - Prefetch any fetcher function call, e.g. package sources
 
 [subs="verbatim,quotes"]
  *nix-prefetch* [(*-A* | *--attr*) <attr>] [(*-E* | *--expr*) <expr>] [(*-i* | *--index*) <index>] [(*-F* | *--fetcher*) (<file> | <attr>)]
-              [(*-f* | *--file*) <file>] [*--fetchurl*]
+              [(*-f* | *--file*) <file>] [*--fetchurl*] [*--force-https*]
               [(*-t* | *--type* | *--hash-algo*) <hash-algo>] [(*-h* | *--hash*) <hash>]
               [*--input* <input-type>] [*--output* <output-type>] [*--print-urls*] [*--print-path*]
               [*--compute-hash*] [*--check-store*] [*-s* | *--silent*] [*-q* | *--quiet*] [*-v* | *--verbose*] [*-vv* | *--debug*] ...
               ([*-f* | *--file*] <file> | [*-A* | *--attr*] <attr> | [*-E* | *--expr*] <expr> | <url>) [<hash>]
-              [*--*] [*--<name>* ((*-f* | *--file*) <file> | (*-A* | *--attr*) <attr> | (*-E* | *--expr*) <expr> | <str>) | *--autocomplete* | *--help*] ...
+              [*--help* | *--autocomplete* | *--eval* <expr>]
+              [*--*] [*--<name>* ((*-f* | *--file*) <file> | (*-A* | *--attr*) <attr> | (*-E* | *--expr*) <expr> | <str>)] ...
  *nix-prefetch* [(*-f* | *--file*) <file>] [*--deep*] [*-s* | *--silent*] [*-v* | *--verbose*] [*-vv* | *--debug*] ... (*-l* | *--list*)
  *nix-prefetch* *--help*
  *nix-prefetch* *--version*
@@ -49,6 +50,9 @@ and can placed both before and after the parameters.
   Fetch only the URL. This converts e.g. the fetcher _fetchFromGitHub_ to _fetchurl_ for its URL,
   and the hash options will be applied to fetchurl instead. The name argument will be copied over.
 
+*--force-https*::
+  Rewrite HTTP to HTTPS URLs, if the fetcher allows it [*default*: 'true']. No check is done whether HTTPS is actually supported.
+
 *-t* <hash-algo>, *--type* <hash-algo>, *--hash-algo* <hash-algo>::
   What algorithm should be used for the output hash of the resulting derivation.
   The following algorithms are allowed: 'md5' (deprecated), 'sha1', 'sha256', or 'sha512' [*default*: 'sha256'].
@@ -71,11 +75,6 @@ and can placed both before and after the parameters.
 
 *--output* <output-type>::
   Specify what type of output should be written to 'stdout' [*default*: 'raw']. The following types are available:
-
-  'expr';;
-    Output a Nix expression, that once evaluated, will result in an attribute set containing the original fetcher,
-    the new fetcher (i.e. prefetcher), and the referenced pkgs set. Some of this information can only be represented at runtime,
-    so the other output formats would not suffice if this information needed for e.g. intergration with other tools.
 
   'nix';;
     The arguments passed to the fetcher function as a Nix attribute set.
@@ -106,6 +105,11 @@ and can placed both before and after the parameters.
 *--autocomplete*::
   List the arguments that can be passed to the fetcher function.
 
+*--eval* <expr>::
+  Evaluate the Nix expression that should define a function getting an attribute set of the references Nix packages set,
+  the original fetcher, and the new fetcher (i.e. prefetcher). This option is necessary, because some of the information cannot
+  be represented as JSON and are thus only available at runtime. It allows further intergration with other tools.
+
 *-l*, *--list*::
   List the available fetchers in Nixpkgs.
 
@@ -133,22 +137,19 @@ and can placed both before and after the parameters.
 == Examples
 
 [subs="verbatim,quotes"]
-  *nix-prefetch* *--list*
-  *nix-prefetch* *--list* *--deep*
-  *nix-prefetch* hello *--help*
-  *nix-prefetch* hello
-  *nix-prefetch* hello *--hash-algo* sha512
-  *nix-prefetch* hello.src
-  *nix-prefetch* \'let name = "hello"; in pkgs.${name}'
-  *nix-prefetch* \'callPackage (pkgs.path + /pkgs/applications/misc/hello) { }'
-  *nix-prefetch* *--file* \'builtins.fetchTarball "channel:nixos-unstable"' hello
-  *nix-prefetch* hello 0000000000000000000000000000000000000000000000000000
-  *nix-prefetch* du-dust.cargoDeps
-  *nix-prefetch* du-dust.cargoDeps *--fetcher* <nixpkgs/pkgs/build-support/rust/fetchcargo.nix>
-  *nix-prefetch* openraPackages.mods.ca *--index* 0 *--rev* master
-  *nix-prefetch* fetchurl *--url* mirror://gnu/hello/hello-2.10.tar.gz
-  *nix-prefetch* ./test-autocall.nix *--url* mirror://gnu/hello/hello-2.10.tar.gz
-  *nix-prefetch* hello *--output* expr
+ *nix-prefetch* hello.src
+ *nix-prefetch* \'{ stdenv, fetchurl }: stdenv.mkDerivation rec {
+                name = "test";
+                src = fetchurl { url = http://ftpmirror.gnu.org/hello/hello-2.10.tar.gz; };
+              }'
+ *nix-prefetch* hello *--check-store* *--verbose*
+ *nix-prefetch* git *--check-store* *--verbose*
+ *nix-prefetch* openraPackages.engines.bleed *--fetchurl* *--rev* master
+ *nix-prefetch* hello 0000000000000000000000000000000000000000000000000000
+ *nix-prefetch* hello_rs.cargoDeps *--fetcher* \'<nixpkgs/pkgs/build-support/rust/fetchcargo.nix>'
+ *nix-prefetch* *--list* *--deep*
+ *nix-prefetch* fetchFromGitHub *--help*
+ *nix-prefetch* \'(import <nixpkgs> { system = "i686-linux"; }).scilab-bin'
 
 == Author
 

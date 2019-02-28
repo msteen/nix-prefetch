@@ -1,2 +1,2 @@
-version=0.1.0
-date=2019-02-20
+version=0.2.0
+date=2019-02-27
