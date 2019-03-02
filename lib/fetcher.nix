@@ -35,8 +35,8 @@ let
     let
       src = toSource expr;
       srcFromOverride = if pkg == null then null else toSource (pkg.override (origArgs:
-        genFetcherOverlay pkgs (filter (name: isFetcher name && pkgs ? ${name}) (attrNames origArgs))));
-      srcFromScoped = toSource (exprFun (scopedNixpkgsImport pkgs.path { }));
+        genFetcherOverlay pkgs (filter (name: pkgs ? ${name} && isFetcher name pkgs.${name}) (attrNames origArgs))));
+      srcFromScoped = toSource (exprFun (fetchersImport pkgs.path { }));
     # Most of the time the fetcher will be passed as a package argument,
     # and it might not be present under that name in the global Nixpkgs namespace,
     # so we try looking up fetchers in the passed arguments first.

@@ -5,8 +5,12 @@ let
   pkgs = self;
   preludeArgsPath = "${builtins.getEnv "XDG_RUNTIME_DIR"}/nix-prefetch/prelude-args.nix";
   preludeArgsGiven = builtins.pathExists preludeArgsPath;
+  preludeArgs = if preludeArgsGiven then import preludeArgsPath else {
+    fetcher = throw "Unknown fetcher.";
+    forceHTTPS = false;
+  };
 
-in with import ./prelude.nix (if preludeArgsGiven then import preludeArgsPath else {});
+in with import ./prelude.nix preludeArgs;
 
 builtinsOverlay // {
   hello_rs = callPackage (if pathExists ../../contrib
@@ -40,22 +44,29 @@ builtinsOverlay // {
   # In order to overlay fetchers we first need to know what attributes in the packages attribute set are actually fetchers.
   # We cannot just assume any function is a fetcher function, because the function might be needed in order to construct
   # the expression being prefetched, so it would never reach the actual fetcher call.
-  topLevelFetchers = filter (name: isFetcher name) (attrNames super);
+  # We can only check for the name, if we were to check whether the value held a function,
+  # it would lead to infinite recursion, because fetcher built on top of other fetchers
+  # would be referring to their final versions, for which the list of top level fetchers is needed.
+  topLevelFetchers = filter (name: isFetcher name id) (attrNames super);
 
   # It is used to secure fetchurl, bit it and its dependencies are in turn defined by fetchurl,
   # so we need to get a hold of an unaltered version of the package.
   cacert = (import super.path { overlays = []; }).cacert;
 
   mirrorsPath = self.path + /pkgs/build-support/fetchurl/mirrors.nix;
-  mirrors = mapAttrs (_: map toHTTPS) (import mirrorsPath);
-  mirrorsImport = scopedImport {
-    import = path: if path == mirrorsPath then mirrors else mirrorsImport path;
+  mirrorsImport = nixpkgsImport {
+    pred = path: path == mirrorsPath;
+    action = path: mapAttrs (_: map toHTTPS) (import path);
   };
-  mirrorsSuperPkgs = super // { inherit (mirrorsImport self.path { overlays = []; }) fetchurlBoot fetchurl; };
+  mirrorsSuperPkgs = super // optionalAttrs preludeArgs.forceHTTPS {
+    inherit (mirrorsImport self.path { overlays = []; }) fetchurlBoot fetchurl;
+  };
 
   fetcherSuperPkgs = mirrorsSuperPkgs // builtinsOverlay // genAttrs [ "fetchipfs" "fetchurl" ] (name: curlFetcher mirrorsSuperPkgs.${name});
 
-in genFetcherOverlay fetcherSuperPkgs (primitiveFetchers ++ topLevelFetchers ++ optional (fetcher.type or null == "attr") fetcher.name) // {
+  fetchers = primitiveFetchers ++ topLevelFetchers ++ optional (fetcher.type or null == "attr") fetcher.name;
+
+in genFetcherOverlay fetcherSuperPkgs fetchers // {
   bazaar = wrapInsecureArgBin super.bazaar "bzr" "-Ossl.cert_reqs=none";
   mercurial = wrapInsecureArgBin super.mercurial "hg" "--insecure";
   subversion = wrapInsecureArgBin super.mercurial "svn" "--trust-server-cert";

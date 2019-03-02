@@ -12,7 +12,7 @@ let lib = builtins // import <nixpkgs/lib>; in with lib; lib // rec {
   foldrAttrs = op: nul: attrs: foldr (name: res: op name attrs.${name} res) nul (attrNames attrs);
   isPath = x: typeOf x == "path" || isString x && hasPrefix "/" x;
   isRecursable = x: try (x.recurseForDerivations or false) false;
-  isFetcher = name: name == "requireFile" || hasPrefix "fetch" name;
+  isFetcher = name: pkg: name == "requireFile" || hasPrefix "fetch" name && isFunction pkg;
   isFetcherPath = path: let name = baseNameOf path; in hasPrefix "fetch" name && hasSuffix ".nix" name;
   isSource = x: x ? outputHash && x ? outputHashMode && x ? outputHashAlgo;
   isPackage = x: isDerivation x && (x ? src || x ? srcs) && !(isSource x);

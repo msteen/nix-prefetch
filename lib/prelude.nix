@@ -1,4 +1,4 @@
-{ fetcher ? throw "Unknown fetcher.", forceHTTPS ? false }@orig:
+{ fetcher, forceHTTPS }@orig:
 
 let prelude = with prelude; import ./lib.nix // {
   fetcher = if orig.fetcher == null || elem orig.fetcher.type [ "file" "attr" ]
@@ -31,16 +31,47 @@ let prelude = with prelude; import ./lib.nix // {
     };
 
   # Using `scopedImport` is rather slow. On my machine prefetching hello went from roughly 600ms to roughly 1200ms,
-  # which is why its only used when all other attempts of determining the fetcher's source have failed.
-  scopedNixpkgsImport = path: config:
+  # which is why we try to minimize its use.
+  nixpkgsImport = { pred, action, extraScope ? {} }: nixpkgsPath: config:
     let
-      pkgs = recursiveUpdate (customImport path config) { builtins.import = customImport; };
-      customImport = scopedImport (builtinsOverlay // {
-        import = path: if isFetcherPath path || fetcher.type or null == "file" && path == fetcher.value
-          then importFetcher path
-          else customImport path;
+      blacklist = map (path: nixpkgsPath + path) [
+        /pkgs/stdenv/generic
+        /pkgs/build-support/fetchurl/boot.nix
+        /pkgs/build-support/cc-wrapper
+      ];
+      graylist = map (path: nixpkgsPath + path) [
+        /pkgs/top-level/all-packages.nix
+        /lib/customisation.nix
+      ];
+      whitelist = map (path: nixpkgsPath + path) [
+        /pkgs/top-level/impure.nix
+        /pkgs/top-level
+        /pkgs/stdenv
+        /pkgs/top-level/stage.nix
+        /lib
+      ];
+      stdenvPathStr = toString nixpkgsPath + "/pkgs/stdenv/";
+      overlayPathStr = "${builtins.getEnv "XDG_RUNTIME_DIR"}/nix-prefetch/";
+      customImport = gray: scopedImport (extraScope // {
+        import = path:
+          let
+            pathStr = toString path;
+            stdenvName = removePrefix stdenvPathStr pathStr;
+            isStdenv = baseNameOf stdenvName == stdenvName; # e.g. /pkgs/stdenv/linux
+          in if pred path then action path
+          else if elem path blacklist then import path
+          else if gray then customImport true path
+          else if elem path whitelist then customImport gray path
+          else if elem path graylist || hasPrefix overlayPathStr pathStr || isStdenv then customImport true path
+          else import path;
       });
-    in pkgs;
+    in recursiveUpdate (customImport false nixpkgsPath config) { builtins.import = customImport false; };
+
+  fetchersImport = nixpkgsImport {
+    pred = path: isFetcherPath path || fetcher.type or null == "file" && path == fetcher.value;
+    action = importFetcher;
+    extraScope = builtinsOverlay;
+  };
 
   # Due to files like `pkgs/development/compilers/elm/fetchElmDeps.nix`,
   # it is ambiguous whether a file defined a fetcher function or not.
@@ -131,7 +162,7 @@ let prelude = with prelude; import ./lib.nix // {
       recur = parents: pkgs:
         concatLists (mapAttrsToList (name: x:
           let names = parents ++ [ name ];
-          in if isFetcher name && isFunction x then [ (concatStringsSep "." names) ]
+          in if isFetcher name x then [ (concatStringsSep "." names) ]
           else if deep && isRecursable x then recur names x
           else []
         ) pkgs);
