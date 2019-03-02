@@ -34,21 +34,21 @@ let prelude = with prelude; import ./lib.nix // {
   # which is why we try to minimize its use.
   nixpkgsImport = { pred, action, extraScope ? {} }: nixpkgsPath: config:
     let
-      blacklist = map (path: nixpkgsPath + path) [
-        /pkgs/stdenv/generic
-        /pkgs/build-support/fetchurl/boot.nix
-        /pkgs/build-support/cc-wrapper
-      ];
-      graylist = map (path: nixpkgsPath + path) [
-        /pkgs/top-level/all-packages.nix
-        /lib/customisation.nix
-      ];
       whitelist = map (path: nixpkgsPath + path) [
         /pkgs/top-level/impure.nix
         /pkgs/top-level
         /pkgs/stdenv
         /pkgs/top-level/stage.nix
         /lib
+      ];
+      graylist = map (path: nixpkgsPath + path) [
+        /pkgs/top-level/all-packages.nix
+        /lib/customisation.nix
+      ];
+      blacklist = map (path: nixpkgsPath + path) [
+        /pkgs/stdenv/generic
+        /pkgs/build-support/fetchurl/boot.nix
+        /pkgs/build-support/cc-wrapper
       ];
       stdenvPathStr = toString nixpkgsPath + "/pkgs/stdenv/";
       overlayPathStr = "${builtins.getEnv "XDG_RUNTIME_DIR"}/nix-prefetch/";
