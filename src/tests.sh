@@ -109,7 +109,7 @@ run-test nix-prefetch fetchhg --input nix <<< '{
   rev = "ea6c3bce8ac1";
   sha256 = "1p9qn9n8mfb4z62h1s94mlg0vshpzafbhsxgzvx78sqlf6bfc80l";
 }'
-run-test nix-prefetch hello --output expr
+run-test nix-prefetch hello --eval '{ prefetcher, ... }: toJSON prefetcher.args'
 run-test nix-prefetch hello --output nix
 run-test nix-prefetch hello --output json
 run-test nix-prefetch hello --output shell
