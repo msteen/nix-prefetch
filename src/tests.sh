@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC1003 disable=SC2016
 
 bin='@bin@'
 
@@ -9,13 +10,9 @@ die() {
   exit 1
 }
 
-quote() {
-  grep -q '^[a-zA-Z0-9_\.-]\+$' <<< "$*" && printf '%s' "$*" || printf '%s' "'${*//'/\\'}'"
-}
-
 quote_args() {
   for arg in "$@"; do
-    printf '%s ' "$(quote "$arg")"
+    printf '%s ' "$( [[ $arg =~ ^[a-zA-Z0-9_\.-]+$ ]] <<< "$arg" && printf '%s' "$arg" || printf '%s' "'${arg//'/\\'}'" )"
   done
 }
 
@@ -58,7 +55,7 @@ run-test() {
     [[ $* == "${script_args[*]}" ]] && script_args=() || return 0
   fi
   while :; do
-    echo "testing... $*"
+    echo "testing... $(quote_args "$@")"
     if run "$@" >&2; then
       echo "$(quote_args "$@")... succeeded!"
       break
@@ -108,6 +105,10 @@ run-test nix-prefetch fetchhg --input nix <<< '{
   url = "https://bitbucket.com/zck/2048.el";
   rev = "ea6c3bce8ac1";
   sha256 = "1p9qn9n8mfb4z62h1s94mlg0vshpzafbhsxgzvx78sqlf6bfc80l";
+}'
+run-test nix-prefetch fetchurl --urls --expr '[ mirror://gnu/hello/hello-2.10.tar.gz ]'
+run-test nix-prefetch fetchurl --input nix <<< '{
+  urls = [ mirror://gnu/hello/hello-2.10.tar.gz ];
 }'
 run-test nix-prefetch hello --eval '{ prefetcher, ... }: toJSON prefetcher.args'
 run-test nix-prefetch hello --output nix

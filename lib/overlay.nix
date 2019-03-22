@@ -51,15 +51,31 @@ builtinsOverlay // {
 
   # It is used to secure fetchurl, bit it and its dependencies are in turn defined by fetchurl,
   # so we need to get a hold of an unaltered version of the package.
-  cacert = (import super.path { overlays = []; }).cacert;
+  cacert = (import self.path { overlays = []; }).cacert;
 
-  mirrorsPath = self.path + /pkgs/build-support/fetchurl/mirrors.nix;
-  mirrorsImport = nixpkgsImport {
-    pred = path: path == mirrorsPath;
-    action = path: mapAttrs (_: map toHTTPS) (import path);
-  };
+  mirrorsPkgs =
+    let
+      mirrorsPath = self.path + /pkgs/build-support/fetchurl/mirrors.nix;
+      whitelist = map (path: self.path + path) [
+        /pkgs/build-support/fetchurl
+        /pkgs/build-support/fetchurl/boot.nix
+        /pkgs/stdenv
+        /pkgs/stdenv/linux
+        /pkgs/top-level
+        /pkgs/top-level/all-packages.nix
+        /pkgs/top-level/impure.nix
+        /pkgs/top-level/stage.nix
+      ];
+      customImport = scopedImport {
+        import = path:
+          if path == mirrorsPath then mapAttrs (_: map toHTTPS) (import mirrorsPath)
+          else if elem path whitelist then customImport path
+          else import path;
+      };
+    in customImport self.path { overlays = []; };
+
   mirrorsSuperPkgs = super // optionalAttrs preludeArgs.forceHTTPS {
-    inherit (mirrorsImport self.path { overlays = []; }) fetchurlBoot fetchurl;
+    inherit (mirrorsPkgs) fetchurlBoot fetchurl;
   };
 
   fetcherSuperPkgs = mirrorsSuperPkgs // builtinsOverlay // genAttrs [ "fetchipfs" "fetchurl" ] (name: curlFetcher mirrorsSuperPkgs.${name});

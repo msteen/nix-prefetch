@@ -5,6 +5,7 @@
               }' 
  *nix-prefetch* hello *--check-store* *--verbose* 
  *nix-prefetch* git *--check-store* *--verbose* 
+ *nix-prefetch* fetchurl *--urls* *--expr* \'[ mirror://gnu/hello/hello-2.10.tar.gz ]' 
  *nix-prefetch* openraPackages.engines.bleed *--fetchurl* *--rev* master 
  *nix-prefetch* hello 0000000000000000000000000000000000000000000000000000 
  *nix-prefetch* hello_rs.cargoDeps *--fetcher* \'<nixpkgs/pkgs/build-support/rust/fetchcargo.nix>' 

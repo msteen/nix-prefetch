@@ -10,8 +10,10 @@ let prelude = with prelude; import ./lib.nix // {
   toExprFun = { type, value, ... }@orig: pkgs:
     if type == "str" then value
     else if elem type [ "file" "attr" "expr" ] then
-      let value = if type == "file" then import orig.value else orig.value pkgs;
-      in tryCallPackage pkgs (if isFunction value && all id (attrValues (functionArgs value)) then value { } else value)
+      let
+        value = if type == "file" then import orig.value else orig.value pkgs;
+        args = functionArgs value;
+      in tryCallPackage pkgs (if isFunction value && args != {} && all id (attrValues args) then value { } else value)
     else throw "Unsupported expression type '${type}'.";
 
   # To support builtin fetchers like any other, they too should be in the package set.
@@ -32,46 +34,35 @@ let prelude = with prelude; import ./lib.nix // {
 
   # Using `scopedImport` is rather slow. On my machine prefetching hello went from roughly 600ms to roughly 1200ms,
   # which is why we try to minimize its use.
-  nixpkgsImport = { pred, action, extraScope ? {} }: nixpkgsPath: config:
+  fetchersImport = pkgs:
     let
-      whitelist = map (path: nixpkgsPath + path) [
-        /pkgs/top-level/impure.nix
-        /pkgs/top-level
-        /pkgs/stdenv
-        /pkgs/top-level/stage.nix
+      blacklist = map (path: pkgs.path + path) [
+        /lib/fetchers.nix
+        /pkgs/build-support/fetchurl/boot.nix
+        /pkgs/build-support/fetchurl/mirrors.nix
+        /pkgs/build-support/substitute/substitute-all.nix
+        /pkgs/build-support/trivial-builders.nix
+        /pkgs/stdenv/adapters.nix
+        /pkgs/stdenv/booter.nix
+        /pkgs/stdenv/common-path.nix
+        /pkgs/stdenv/generic
+        /pkgs/top-level/aliases.nix
+        /pkgs/top-level/splice.nix
+      ] ++ [ (toPath "${pkgs.nix}/share/nix/corepkgs/fetchurl.nix") ];
+      libPath = toString (pkgs.path + /lib);
+      whitelist = map (path: pkgs.path + path) [
         /lib
-      ];
-      graylist = map (path: nixpkgsPath + path) [
-        /pkgs/top-level/all-packages.nix
         /lib/customisation.nix
       ];
-      blacklist = map (path: nixpkgsPath + path) [
-        /pkgs/stdenv/generic
-        /pkgs/build-support/fetchurl/boot.nix
-        /pkgs/build-support/cc-wrapper
-      ];
-      stdenvPathStr = toString nixpkgsPath + "/pkgs/stdenv/";
-      overlayPathStr = "${builtins.getEnv "XDG_RUNTIME_DIR"}/nix-prefetch/";
-      customImport = gray: scopedImport (extraScope // {
-        import = path:
-          let
-            pathStr = toString path;
-            stdenvName = removePrefix stdenvPathStr pathStr;
-            isStdenv = baseNameOf stdenvName == stdenvName; # e.g. /pkgs/stdenv/linux
-          in if pred path then action path
-          else if elem path blacklist then import path
-          else if gray then customImport true path
-          else if elem path whitelist then customImport gray path
-          else if elem path graylist || hasPrefix overlayPathStr pathStr || isStdenv then customImport true path
-          else import path;
+      customImport = scopedImport (builtinsOverlay // {
+        import = path: (
+          if elem path blacklist then import
+          else if hasPrefix libPath (toString path) then if elem path whitelist then customImport else import
+          else if isFetcherPath path || fetcher.type or null == "file" && path == fetcher.value then importFetcher
+          else customImport
+        ) path;
       });
-    in recursiveUpdate (customImport false nixpkgsPath config) { builtins.import = customImport false; };
-
-  fetchersImport = nixpkgsImport {
-    pred = path: isFetcherPath path || fetcher.type or null == "file" && path == fetcher.value;
-    action = importFetcher;
-    extraScope = builtinsOverlay;
-  };
+    in recursiveUpdate (customImport pkgs.path { }) { builtins.import = customImport; };
 
   # Due to files like `pkgs/development/compilers/elm/fetchElmDeps.nix`,
   # it is ambiguous whether a file defined a fetcher function or not.
@@ -130,20 +121,24 @@ let prelude = with prelude; import ./lib.nix // {
         // { inherit type name; args = {}; };
     };
 
-  markFetcherDrv = { type, name, fetcher, args, drv ? fetcher args }: let drvOverriden = (drv.overrideAttrs or (const drv)) (origAttrs:
-    let
-      origPassthru = origAttrs.passthru or {};
-      oldArgs =
-        if origPassthru ? __fetcher then
-          if !(elem origPassthru.__fetcher.name primitiveFetchers) then functionArgs origPassthru.__fetcher
-          else throw "Fetcher ${name} is build on top of the primitive fetcher ${origPassthru.__fetcher.name}, which is not supported."
-        else {};
-      newArgs = oldArgs // functionArgs fetcher // mapAttrs (_: _: true) (builtins.intersectAttrs args oldArgs);
-    in {
-      passthru = origPassthru // {
-        __fetcher = setFunctionArgs fetcher newArgs // { inherit type name args; drv = drvOverriden; };
-      };
-    }); in drvOverriden;
+  markFetcherDrv = { type, name, fetcher, args, drv ? fetcher args }:
+    if isDerivation drv then
+      let drvOverriden = (drv.overrideAttrs or (f: let attrs = f drv; in drv // attrs // attrs.passthru)) (origAttrs:
+        let
+          origPassthru = origAttrs.passthru or {};
+          oldArgs =
+            if origPassthru ? __fetcher then
+              if !(elem origPassthru.__fetcher.name primitiveFetchers) then functionArgs origPassthru.__fetcher
+              else throw "Fetcher ${name} is build on top of the primitive fetcher ${origPassthru.__fetcher.name}, which is not supported."
+            else {};
+          newArgs = oldArgs // functionArgs fetcher // mapAttrs (_: _: true) (builtins.intersectAttrs args oldArgs);
+        in {
+          passthru = origPassthru // {
+            __fetcher = setFunctionArgs fetcher newArgs // { inherit type name args; drv = drvOverriden; };
+          };
+        });
+      in drvOverriden
+    else throw "Fetcher ${name} does not produce a derivation, hence is not a valid fetcher function.";
 
   # The error "called without required argument" cannot be handled by `tryEval`,
   # so we need to make sure that `callPackage` will succeed before calling it.
@@ -151,7 +146,7 @@ let prelude = with prelude; import ./lib.nix // {
     let
       needed = functionArgs x;
       found = builtins.intersectAttrs needed pkgs;
-    in if isFunction x && attrNames needed == attrNames found
+    in if isFunction x && needed != {} && attrNames needed == attrNames found
     then { success = true; value = makeOverridable x found; }
     else { success = false; value = null; };
 

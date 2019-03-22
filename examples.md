@@ -41,7 +41,7 @@ trying https://ftpmirror.gnu.org/hello/hello-2.10.tar.gz
   % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
                                  Dload  Upload   Total   Spent    Left  Speed
   0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0
-100  708k  100  708k    0     0  1047k      0 --:--:-- --:--:-- --:--:-- 1047k
+100  708k  100  708k    0     0   965k      0 --:--:-- --:--:-- --:--:--  965k
 
 0ssi1wpaf7plaswqqjwigppsg5fyh99vdlb9kzl7c9lng89ndq1i
 ```
@@ -61,10 +61,22 @@ https://www.kernel.org/pub/software/scm/git/git-2.18.1.tar.xz
 trying https://www.kernel.org/pub/software/scm/git/git-2.18.1.tar.xz
   % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
                                  Dload  Upload   Total   Spent    Left  Speed
-100   178  100   178    0     0   1424      0 --:--:-- --:--:-- --:--:--  1424
-100 4983k  100 4983k    0     0  10.1M      0 --:--:-- --:--:-- --:--:-- 24.4M
+100   178  100   178    0     0   1459      0 --:--:-- --:--:-- --:--:--  1459
+100 4983k  100 4983k    0     0  10.5M      0 --:--:-- --:--:-- --:--:-- 10.5M
 
 1dlq120c9vmvp1m9gmgd6m609p2wkgfkljrpb0i002mpbjj091c8
+```
+
+Passing a list rather than a string argument:
+```
+$ nix-prefetch fetchurl --urls --expr '[ mirror://gnu/hello/hello-2.10.tar.gz ]' 
+The fetcher will be called as follows:
+> fetchurl {
+>   sha256 = "0000000000000000000000000000000000000000000000000000";
+>   urls = [ "mirror://gnu/hello/hello-2.10.tar.gz" ];
+> }
+
+0ssi1wpaf7plaswqqjwigppsg5fyh99vdlb9kzl7c9lng89ndq1i
 ```
 
 Modify the Git revision of a call to `fetchFromGitHub`:
@@ -103,7 +115,7 @@ The fetcher will be called as follows:
 >   patches = [  ];
 >   sha256 = "0sjjj9z1dhilhpc8pq4154czrb79z9cm044jvn75kxcjv6v5l2m5";
 >   sourceRoot = null;
->   src = /nix/store/qbnf8r6y26z7865milkz7dsmq6z0aqps-nix-prefetch-0.1.0/contrib/hello_rs;
+>   src = /nix/store/sd0j1kma94ss1ikqf4917fmbm72l3793-nix-prefetch-0.1.0/contrib/hello_rs;
 >   srcs = null;
 > }
 

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC1003 disable=SC2016
 
 quote_args() {
   for arg in "$@"; do
@@ -25,8 +26,8 @@ $(nix-prefetch "$@" 2>&1)
   printf '%s\n' " *nix-prefetch* $(quote_asciidoc "$@")" >> examples.asciidoc
 }
 
-> examples.md
-> examples.asciidoc
+: > examples.md
+: > examples.asciidoc
 
 run-example 'A package source' \
   nix-prefetch hello.src
@@ -39,6 +40,8 @@ run-example 'A package checked to already be in the Nix store thats not installe
   nix-prefetch hello --check-store --verbose
 run-example 'A package checked to already be in the Nix store thats installed (i.e. certain the hash is valid, no need to redownload)' \
   nix-prefetch git --check-store --verbose
+run-example 'Passing a list rather than a string argument' \
+  nix-prefetch fetchurl --urls --expr '[ mirror://gnu/hello/hello-2.10.tar.gz ]'
 run-example 'Modify the Git revision of a call to `fetchFromGitHub`'\
   nix-prefetch openraPackages.engines.bleed --fetchurl --rev master
 run-example 'Hash validation' \

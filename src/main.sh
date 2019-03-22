@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# shellcheck disable=SC2015 disable=SC2030 disable=SC2031
+# shellcheck disable=SC1003 disable=SC2015 disable=SC2016 disable=SC2030 disable=SC2031
 
 # Tested succesfully with:
 # set -euxo pipefail
@@ -61,8 +61,7 @@ issue() {
 }
 
 quote() {
-  # shellcheck disable=SC1003
-  grep -q '^[a-zA-Z0-9_\.-]\+$' <<< "$*" && printf '%s' "$*" || printf '%s' "'${*//'/\\'}'"
+  [[ $1 =~ ^[a-zA-Z0-9_\.-]+$ ]] <<< "$1" && printf '%s' "$1" || printf '%s' "'${1//'/\\'}'"
 }
 
 quote_args() {
@@ -161,9 +160,11 @@ nix_eval() {
   local output_type=$1; shift
   local nix=$1; shift
   nix eval "$output_type" "(
-    with ${args_nix};
-    let prelude = import $lib/prelude.nix { inherit fetcher forceHTTPS; }; in
-    let pkgs = import $lib/pkgs.nix { inherit prelude nixpkgsPath; }; in
+    let
+      args = ${args_nix};
+      prelude = import $lib/prelude.nix { inherit (args) fetcher forceHTTPS; };
+      pkgs = import $lib/pkgs.nix { inherit prelude; inherit (args) nixpkgsPath; };
+    in with args;
     ${nix}
   )" "${nix_eval_args[@]}" "$@"
 }
@@ -394,6 +395,14 @@ if [[ -v fetcher ]]; then
   fetcher=$(nix_typed "$type" "$fetcher")
 fi
 
+if [[ $input_type == shell ]]; then
+  while IFS= read -r -d '' line; do
+    [[ $line == *'='* ]] || die "Expected a name-value pair seperated by an equal sign, yet got input line '${line}'."
+    IFS='=' read -r name value <<< "$line"
+    fetcher_args[$name]=$(nix_typed 'str' "$value")
+  done < /dev/stdin
+fi
+
 # An expression containing an URL is just syntax sugar
 # for calling fetchurl with the URL passed as a fetcher argument.
 if [[ $expr_type == url ]]; then
@@ -407,22 +416,6 @@ fi
 if [[ -v file && ! -v expr ]]; then
   expr=$file
   file='<nixpkgs>' # reset to the default
-fi
-
-if [[ -n $input_type ]]; then
-  [[ $input_type == raw ]] && quoted_input=$(quote_nul < /dev/stdin) || input=$(< /dev/stdin)
-  if [[ $input_type == nix ]]; then
-    input=$(nix-instantiate --eval --strict --expr '{ input }: builtins.toJSON input' --arg input "$input" "${nix_eval_args[@]}") || exit
-    input=$(jq 'fromjson' <<< "$input") || exit
-  fi
-  if [[ $input_type =~ ^(json|nix)$ ]]; then
-    quoted_input=$(jq --join-output 'to_entries | .[] | .key + "=" + .value + "\u0000"' <<< "$input" | quote_nul) || exit
-  fi
-  while IFS= read -r -d '' line; do
-    [[ $line == *'='* ]] || die "Expected a name value pair seperated by an equal sign, yet got input line '${line}'."
-    IFS='=' read -r name value <<< "$line"
-    fetcher_args[$name]=$(nix_typed 'str' "$value")
-  done < <(unquote_nul "$quoted_input")
 fi
 
 if (( debug )); then
@@ -455,7 +448,13 @@ fi
 
 expr=$(nix_typed "$expr_type" "$expr")
 
-fetcher_args_nix='{'
+case $input_type in
+  json) fetcher_args_nix="builtins.fromJSON $(nix_str "$(< /dev/stdin)")";;
+   nix) fetcher_args_nix="( $(< /dev/stdin) )";;
+     *) fetcher_args_nix=; false;;
+esac && printf -v fetcher_args_nix 'prelude.mapAttrs (_: value: %s) (%s) // ' "$(nix_typed 'expr' 'value')" "$fetcher_args_nix"
+
+fetcher_args_nix+='{'
 for name in "${!fetcher_args[@]}"; do
   value=${fetcher_args[$name]}
   fetcher_args_nix+=$'\n    '"${name} = ${value};"
@@ -482,7 +481,6 @@ printf '%s\n' "{
 
 fetcher_autocomplete() {
   nix_call 'fetcherAutocomplete'
-  # shellcheck disable=SC2016
   out=$(nix_eval --raw "(
     with prelude;
     with import $lib/fetcher.nix { inherit prelude pkgs expr index fetcher; };
