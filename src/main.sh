@@ -211,7 +211,7 @@ handle_common() {
   (( silent )) && exec 2> /dev/null
   (( debug )) && nix_eval_args+=( --show-trace )
 
-  if ! overlays=$(sed -nE 's/.*nixpkgs-overlays=([^:]*)(:|$).*/\1/p' <<< "$NIX_PATH"); then
+  if ! overlays=$(nix-instantiate --find-file nixpkgs-overlays 2> /dev/null); then
     if   [[ -e $HOME/.config/nixpkgs/overlays.nix ]]; then
       overlays=$HOME/.config/nixpkgs/overlays.nix
     elif [[ -e $HOME/.config/nixpkgs/overlays ]]; then
@@ -231,7 +231,7 @@ handle_common() {
   nixpkgs_overlays=$XDG_RUNTIME_DIR/nix-prefetch/overlays
   if [[ -f $overlays ]]; then
     nixpkgs_overlays+=.nix
-    { cat "$overlays"; echo ' ++ [ ('; cat "$lib/overlay.nix"; echo ') ]'; } > "$nixpkgs_overlays"
+    printf '%s ++ [ (import %s) ]\n' "$(< "$overlays")" "$(nix_str "$lib/overlay.nix")" > "$nixpkgs_overlays"
   else
     mkdir "$nixpkgs_overlays"
     [[ -n $overlays ]] && ln -s "$overlays/"* "$nixpkgs_overlays/"
