@@ -19,7 +19,7 @@ _nix_prefetch_attrs() {
 
 _nix_prefetch() {
   local params=(
-    '-f' '--file' '-A' '--attr' '-E' '--expr' '-i' '--index' '-F' '--fetcher'
+    '-f' '--file' '-A' '--attr' '-E' '--expr' '-i' '--index' '-F' '--fetcher' '--arg' '--argstr' '-I' '--option'
     '-t' '--type' '--hash-algo' '-h' '--hash' '--input' '--output' '--eval'
   )
   local flags=( -s --silent -q --quiet -v --verbose -vv --debug -l --list --version ) flag
@@ -41,6 +41,13 @@ _nix_prefetch() {
       -E|--expr|-F|--fetcher)
         _files
         _nix_prefetch_attrs "$curr_word"
+        ;;
+      -I)
+        if [[ $curr_word == *'='* ]]; then
+          # https://unix.stackexchange.com/questions/445889/use-colon-as-filename-separator-in-zsh-tab-completion
+          compset -P 1 '*='
+          _files
+        fi
         ;;
       -t|--type|--hash-algo)
         local values=( 'md5' 'sha1' 'sha256' 'sha512' )
@@ -66,7 +73,7 @@ _nix_prefetch() {
     fi
     if (( ${#_nix_prefetch_all_args} == 0 )) || [[ $given_args != $_nix_prefetch_given_args ]]; then
       _nix_prefetch_given_args=$given_args
-      all_args=$(nix-prefetch --silent "${words[@]:1:${#words[@]} - 2}" --autocomplete) &&
+      all_args=$(nix-prefetch --silent "${words[@]:1:${#words} - 2}" --autocomplete) &&
         _nix_prefetch_all_args=( $(echo $all_args) ) || _nix_prefetch_all_args=()
     fi
   }

@@ -40,6 +40,8 @@ $(nix-prefetch "$@" 2>&1)
     nix-prefetch git --check-store --verbose
   run-example 'Passing a list rather than a string argument' \
     nix-prefetch fetchurl --urls --expr '[ mirror://gnu/hello/hello-2.10.tar.gz ]'
+  run-example 'Passing an argument to the expression' \
+    nix-prefetch '{ name }: pkgs.${name}' --argstr name fetchurl --url mirror://gnu/hello/hello-2.10.tar.gz
   run-example 'Modify the Git revision of a call to `fetchFromGitHub`'\
     nix-prefetch openraPackages.engines.bleed --fetchurl --rev master
   run-example 'Hash validation' \

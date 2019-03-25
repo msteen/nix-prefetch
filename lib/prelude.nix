@@ -7,13 +7,14 @@ let prelude = with prelude; import ./lib.nix // {
 
   # The value is defined as a function to allow us to bring the `pkgs` attribute of Nixpkgs into scope,
   # upon which the actual value might be dependent.
-  toExprFun = { type, value, ... }@orig: pkgs:
+  toExprFun = { type, value, args ? null, ... }@orig: pkgs:
     if type == "str" then value
     else if elem type [ "file" "attr" "expr" ] then
       let
         value = if type == "file" then import orig.value else orig.value pkgs;
-        args = functionArgs value;
-      in tryCallPackage pkgs (if isFunction value && args != {} && all id (attrValues args) then value { } else value)
+        funArgs = functionArgs value;
+      in if args != null then value (args pkgs)
+      else tryCallPackage pkgs (if isFunction value && funArgs != {} && all id (attrValues funArgs) then value { } else value)
     else throw "Unsupported expression type '${type}'.";
 
   # To support builtin fetchers like any other, they too should be in the package set.

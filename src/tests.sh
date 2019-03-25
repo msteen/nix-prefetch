@@ -51,7 +51,7 @@ run() {
 }
 
 run-test() {
-  if (( ${#script_args} > 0 )); then
+  if (( ${#script_args[@]} > 0 )); then
     [[ $* == "${script_args[*]}" ]] && script_args=() || return 0
   fi
   while :; do
@@ -107,6 +107,8 @@ run-test nix-prefetch fetchhg --input nix <<< '{
   sha256 = "1p9qn9n8mfb4z62h1s94mlg0vshpzafbhsxgzvx78sqlf6bfc80l";
 }'
 run-test nix-prefetch fetchurl --urls --expr '[ mirror://gnu/hello/hello-2.10.tar.gz ]'
+run-test nix-prefetch '{ x }: x' --arg x fetchurl --url mirror://gnu/hello/hello-2.10.tar.gz
+run-test nix-prefetch '{ name }: pkgs.${name}' --argstr name fetchurl --url mirror://gnu/hello/hello-2.10.tar.gz
 run-test nix-prefetch fetchurl --input nix <<< '{
   urls = [ mirror://gnu/hello/hello-2.10.tar.gz ];
 }'

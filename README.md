@@ -129,7 +129,7 @@ trying https://ftpmirror.gnu.org/hello/hello-2.10.tar.gz
   % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
                                  Dload  Upload   Total   Spent    Left  Speed
   0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0
-100  708k  100  708k    0     0  1102k      0 --:--:-- --:--:-- --:--:-- 1102k
+100  708k  100  708k    0     0  1072k      0 --:--:-- --:--:-- --:--:-- 1072k
 
 0ssi1wpaf7plaswqqjwigppsg5fyh99vdlb9kzl7c9lng89ndq1i
 ```
@@ -153,6 +153,18 @@ The fetcher will be called as follows:
 > fetchurl {
 >   sha256 = "0000000000000000000000000000000000000000000000000000";
 >   urls = [ "mirror://gnu/hello/hello-2.10.tar.gz" ];
+> }
+
+0ssi1wpaf7plaswqqjwigppsg5fyh99vdlb9kzl7c9lng89ndq1i
+```
+
+Passing an argument to the expression:
+```
+$ nix-prefetch '{ name }: pkgs.${name}' --argstr name fetchurl --url 'mirror://gnu/hello/hello-2.10.tar.gz' 
+The fetcher will be called as follows:
+> fetchurl {
+>   sha256 = "0000000000000000000000000000000000000000000000000000";
+>   url = "mirror://gnu/hello/hello-2.10.tar.gz";
 > }
 
 0ssi1wpaf7plaswqqjwigppsg5fyh99vdlb9kzl7c9lng89ndq1i
@@ -194,7 +206,7 @@ The fetcher will be called as follows:
 >   patches = [  ];
 >   sha256 = "0sjjj9z1dhilhpc8pq4154czrb79z9cm044jvn75kxcjv6v5l2m5";
 >   sourceRoot = null;
->   src = /nix/store/sd0j1kma94ss1ikqf4917fmbm72l3793-nix-prefetch-0.1.0/contrib/hello_rs;
+>   src = /nix/store/m2a0y3phmxh5qi9q0i10an6rl15q1aig-nix-prefetch-0.1.0/contrib/hello_rs;
 >   srcs = null;
 > }
 
@@ -260,6 +272,7 @@ Prefetch the fetchFromGitHub function call
 Usage:
   nix-prefetch fetchFromGitHub
                [(-f | --file) <file>] [--fetchurl] [--force-https]
+               [--arg <name> <value>] [--argstr <name> <value>] [-I <path>] [--option <name> <value>]
                [(-t | --type | --hash-algo) <hash-algo>] [(-h | --hash) <hash>]
                [--input <input-type>] [--output <output-type>] [--print-urls] [--print-path]
                [--compute-hash] [--check-store] [-s | --silent] [-q | --quiet] [-v | --verbose] [-vv | --debug] ...

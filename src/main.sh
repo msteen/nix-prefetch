@@ -122,6 +122,8 @@ nix_str() {
   printf '%s' "${str//\$/\\\$}"
 }
 
+printf -v lib_nix '%s + toString ' "$(nix_str "$lib")"
+
 nix_expr_scope='pkgs: with pkgs.lib; with pkgs; let inherit (pkgs) builtins; inherit (builtins) fetchTarball import; in'
 nix_typed() {
   local type=$1 raw=$2
@@ -162,9 +164,11 @@ nix_eval() {
   nix eval "$output_type" "(
     let
       args = ${args_nix};
-      prelude = import $lib/prelude.nix { inherit (args) fetcher forceHTTPS; };
-      pkgs = import $lib/pkgs.nix { inherit prelude; inherit (args) nixpkgsPath; };
-    in with args;
+      prelude = import ($lib_nix/prelude.nix) { inherit (args) fetcher forceHTTPS; };
+      pkgs = import ($lib_nix/pkgs.nix) { inherit prelude; inherit (args) nixpkgsPath; };
+    in
+    with prelude;
+    with args;
     ${nix}
   )" "${nix_eval_args[@]}" "$@"
 }
@@ -173,8 +177,8 @@ nix_eval_prefetcher() {
   local output_type=$1; shift
   local nix=$1; shift
   nix_eval "$output_type" "(
-    with import $lib/fetcher.nix { inherit prelude pkgs expr index fetcher; };
-    with import $lib/prefetcher.nix { inherit prelude pkgs pkg fetcher fetcherArgs hashAlgo hash fetchURL forceHTTPS; };
+    with import ($lib_nix/fetcher.nix) { inherit prelude pkgs expr exprArgs index fetcher; };
+    with import ($lib_nix/prefetcher.nix) { inherit prelude pkgs pkg fetcher fetcherArgs hashAlgo hash fetchURL forceHTTPS; };
     ${nix}
   )" "$@"
 }
@@ -197,6 +201,10 @@ die_option_param() {
   die_usage "The option '${arg}' needs a parameter."
 }
 
+die_option_name_value() {
+  die_usage "The option '${arg}' needs a name and value."
+}
+
 show_usage() {
   { man --pager=cat nix-prefetch | col --no-backspaces --spaces || true; } | awk '
     $1 == "SYNOPSIS" { print "Usage:"; between=1; next }
@@ -211,7 +219,7 @@ handle_common() {
   (( silent )) && exec 2> /dev/null
   (( debug )) && nix_eval_args+=( --show-trace )
 
-  if ! overlays=$(nix-instantiate --find-file nixpkgs-overlays 2> /dev/null); then
+  if ! overlays=$(nix-instantiate --find-file nixpkgs-overlays "${nix_eval_args[@]}" 2> /dev/null); then
     if   [[ -e $HOME/.config/nixpkgs/overlays.nix ]]; then
       overlays=$HOME/.config/nixpkgs/overlays.nix
     elif [[ -e $HOME/.config/nixpkgs/overlays ]]; then
@@ -231,7 +239,7 @@ handle_common() {
   nixpkgs_overlays=$XDG_RUNTIME_DIR/nix-prefetch/overlays
   if [[ -f $overlays ]]; then
     nixpkgs_overlays+=.nix
-    printf '%s ++ [ (import %s) ]\n' "$(< "$overlays")" "$(nix_str "$lib/overlay.nix")" > "$nixpkgs_overlays"
+    printf '%s ++ [ (import %s) ]\n' "$(< "$overlays")" "($lib_nix/overlay.nix)" > "$nixpkgs_overlays"
   else
     mkdir "$nixpkgs_overlays"
     [[ -n $overlays ]] && ln -s "$overlays/"* "$nixpkgs_overlays/"
@@ -296,6 +304,7 @@ done
 
 expr_type=; input_type=; output_type=raw; eval=
 fetchurl=0; force_https=1; print_urls=0; print_path=0; compute_hash=1; check_store=0; autocomplete=0; help=0
+declare -A expr_args
 declare -A fetcher_args
 param_count=0
 while (( $# >= 1 )); do
@@ -317,6 +326,21 @@ while (( $# >= 1 )); do
       [[ $name == no-* ]] && name=${name#no-} && value=0 || value=1
       name=${name//-/_}
       declare "${name}=${value}"
+      ;;
+    --arg|--argstr)
+      (( $# >= 2 )) || die_option_name_value
+      name=$1; shift
+      value=$1; shift
+      [[ $arg == --argstr ]] && value=$(nix_str "$value")
+      expr_args[$name]=$value
+      ;;
+    -I)
+      (( $# >= 1 )) || die_option_param
+      nix_eval_args+=( -I "$1" ); shift
+      ;;
+    --option)
+      (( $# >= 2 )) || die_option_name_value
+      nix_eval_args+=( --option "$1" "$2" ); shift; shift
       ;;
     -s|--silent)  silent=1; quiet=1; verbose=0; debug=0;;
     -q|--quiet)   silent=0; quiet=1; verbose=0; debug=0;;
@@ -418,11 +442,26 @@ if [[ -v file && ! -v expr ]]; then
   file='<nixpkgs>' # reset to the default
 fi
 
+# The NIX_PATH lookup is done regardless of whether it is truly necessary,
+# because we e.g. do not want it to fail on not being able to resolve 'nixpkgs/lib',
+# while the missing 'nixpkgs' would be the culprit.
+if [[ $file == '<'*'>' ]]; then
+  value=$(nix-instantiate --find-file "${file:1:-1}" "${nix_eval_args[@]}") || exit
+  if [[ $file != '<nixpkgs>' ]]; then
+    file=$value
+    nix_eval_args+=( -I "nixpkgs=$file" )
+  fi
+fi
+
 if (( debug )); then
   printf '%s\n' "$(print_bash_vars '
     file expr index fetcher fetchurl force_https hash hash_algo input_type output_type print_path print_urls
     compute_hash check_store silent quiet verbose debug eval autocomplete help
   ' 2>&1)" >&2
+  for name in "${!expr_args[@]}"; do
+    value=${expr_args[$name]}
+    print_assign "expr_args[$name]" "$value"
+  done
   for name in "${!fetcher_args[@]}"; do
     value=${fetcher_args[$name]}
     print_assign "fetcher_args[$name]" "$value"
@@ -446,6 +485,17 @@ if [[ $output_type != raw ]]; then
   (( print_urls )) && die_no_raw_output '--print-urls'
 fi
 
+if (( ${#expr_args[@]} > 0 )); then
+  expr_args_nix="$nix_expr_scope { "
+  for name in "${!expr_args[@]}"; do
+    value=${expr_args[$name]}
+    expr_args_nix+="${name} = (${value}); "
+  done
+  expr_args_nix+='}'
+else
+  expr_args_nix=null
+fi
+
 expr=$(nix_typed "$expr_type" "$expr")
 
 case $input_type in
@@ -465,6 +515,7 @@ fetcher_args_nix+='}'
 args_nix="{
   nixpkgsPath = (${file});
   expr = ${expr};
+  exprArgs = ${expr_args_nix};
   index = $( [[ -v index ]] && printf '%s\n' "$index" || echo null );
   fetcher = $( [[ -v fetcher ]] && printf '%s\n' "$fetcher" || echo null );
   fetcherArgs = ${fetcher_args_nix};
@@ -481,11 +532,7 @@ printf '%s\n' "{
 
 fetcher_autocomplete() {
   nix_call 'fetcherAutocomplete'
-  out=$(nix_eval --raw "(
-    with prelude;
-    with import $lib/fetcher.nix { inherit prelude pkgs expr index fetcher; };
-    concatMapStrings (arg: "'"--${arg}\n"'") (attrNames (functionArgs fetcher))
-  )") || exit
+  out=$(nix_eval_prefetcher --raw 'concatMapStrings (arg: "--${arg}\n") (attrNames (functionArgs fetcher))') || exit
   [[ -n $out ]] && printf '%s\n' "$out" || exit 1
 }
 
@@ -497,7 +544,7 @@ fetcher_help() {
     between { print "  " substr($0, RLENGTH + 1) }
   ' )
   nix_call 'fetcherHelp'
-  nix_eval_prefetcher --raw "import $lib/fetcher-help.nix { inherit prelude pkgs pkg fetcher; usage = $(nix_str "$usage"); }"
+  nix_eval_prefetcher --raw "import ($lib_nix/fetcher-help.nix) { inherit prelude pkgs pkg fetcher; usage = $(nix_str "$usage"); }"
 }
 
 die_require_file() {

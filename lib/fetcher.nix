@@ -1,9 +1,9 @@
-{ prelude, pkgs, expr, index, fetcher }@orig:
+{ prelude, pkgs, expr, exprArgs, index, fetcher }@orig:
 
 with prelude;
 
 let
-  exprFun = toExprFun orig.expr;
+  exprFun = toExprFun (orig.expr // { args = orig.exprArgs; });
   expr = exprFun pkgs;
   pkg = if isPackage expr then expr else null;
 

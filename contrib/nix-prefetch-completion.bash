@@ -1,5 +1,5 @@
 _nix_prefetch_reply() {
-  [[ -n $1 ]] && mapfile -t -O "${#COMPREPLY}" COMPREPLY <<< "$1"
+  [[ -n $1 ]] && mapfile -t -O "${#COMPREPLY[@]}" COMPREPLY <<< "$1"
 }
 
 _nix_prefetch_attrs() {
@@ -20,7 +20,7 @@ _nix_prefetch_attrs() {
 _nix_prefetch() {
   # Indenting with spaces is required to still make " $prev_word " work.
   local params='
-    -f --file -A --attr -E --expr -i --index -F --fetcher
+    -f --file -A --attr -E --expr -i --index -F --fetcher --arg --argstr -I --option
     -t --type --hash-algo -h --hash --input --output --eval '
   local flags=' -s --silent -q --quiet -v --verbose -vv --debug -l --list --version ' flag
   for flag in --fetchurl --force-https --print-urls --print-path --compute-hash --check-store --autocomplete --help --deep; do
@@ -42,6 +42,9 @@ _nix_prefetch() {
       -E|--expr|-F|--fetcher|--eval)
         _nix_prefetch_reply "$(compgen -f -- "$curr_word")"
         _nix_prefetch_attrs "$curr_word"
+        ;;
+      -I)
+        [[ $curr_word == *'='* ]] && _nix_prefetch_reply "$(compgen -f -- "${curr_word#*=}" | sed "s/^/${curr_word%%=*}=/")"
         ;;
       -t|--type|--hash-algo)
         local values='md5 sha1 sha256 sha512'

@@ -13,6 +13,7 @@ nix-prefetch - Prefetch any fetcher function call, e.g. package sources
 [subs="verbatim,quotes"]
  *nix-prefetch* [(*-A* | *--attr*) <attr>] [(*-E* | *--expr*) <expr>] [(*-i* | *--index*) <index>] [(*-F* | *--fetcher*) (<file> | <attr>)]
               [(*-f* | *--file*) <file>] [*--fetchurl*] [*--force-https*]
+              [*--arg* <name> <value>] [*--argstr* <name> <value>] [*-I* <path>] [*--option* <name> <value>]
               [(*-t* | *--type* | *--hash-algo*) <hash-algo>] [(*-h* | *--hash*) <hash>]
               [*--input* <input-type>] [*--output* <output-type>] [*--print-urls*] [*--print-path*]
               [*--compute-hash*] [*--check-store*] [*-s* | *--silent*] [*-q* | *--quiet*] [*-v* | *--verbose*] [*-vv* | *--debug*] ...
@@ -52,6 +53,22 @@ and can placed both before and after the parameters.
 
 *--force-https*::
   Rewrite HTTP to HTTPS URLs, if the fetcher allows it [*default*: 'true']. No check is done whether HTTPS is actually supported.
+
+*--arg* <name> <value>::
+  Just like *nix-instantiate* and *nix-build*, when the expression passed to *nix-prefetch* results in a function,
+  it will automatically be called, but not all arguments might have default values,
+  so using *--arg* a value for them can still be supplied.
+
+*--argstr* <name> <value>::
+  This option is just like *--arg*, except that value will be considered a Nix string rather than a Nix expression.
+
+*-I* <path>::
+  Add a path to the Nix search path. See the *NIX_PATH* environment variable for more information.
+  Paths added through *-I* take precedence over *NIX_PATH*.
+
+*--option* <name> <value>::
+  Set the Nix configuration <name> to <value>. This overrides the settings in the Nix configuration file.
+  See *nix.conf(5)* for more information.
 
 *-t* <hash-algo>, *--type* <hash-algo>, *--hash-algo* <hash-algo>::
   What algorithm should be used for the output hash of the resulting derivation.
@@ -145,6 +162,7 @@ and can placed both before and after the parameters.
  *nix-prefetch* hello *--check-store* *--verbose* 
  *nix-prefetch* git *--check-store* *--verbose* 
  *nix-prefetch* fetchurl *--urls* *--expr* \'[ mirror://gnu/hello/hello-2.10.tar.gz ]' 
+ *nix-prefetch* \'{ name }: pkgs.${name}' *--argstr* name fetchurl *--url* \'mirror://gnu/hello/hello-2.10.tar.gz' 
  *nix-prefetch* openraPackages.engines.bleed *--fetchurl* *--rev* master 
  *nix-prefetch* hello 0000000000000000000000000000000000000000000000000000 
  *nix-prefetch* hello_rs.cargoDeps *--fetcher* \'<nixpkgs/pkgs/build-support/rust/fetchcargo.nix>' 
