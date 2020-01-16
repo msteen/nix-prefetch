@@ -14,7 +14,7 @@ with callPackage (fetchFromGitHub {
 stdenv.mkDerivation rec {
   name = "${pname}-${version}";
   pname = "nix-prefetch";
-  version = "0.1.0";
+  version = "0.3.0";
 
   src = gitignoreSource [ ".git" ] ./.;
 
