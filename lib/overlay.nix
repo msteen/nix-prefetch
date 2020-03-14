@@ -85,7 +85,7 @@ builtinsOverlay // {
 in genFetcherOverlay fetcherSuperPkgs fetchers // {
   bazaar = wrapInsecureArgBin super.bazaar "bzr" "-Ossl.cert_reqs=none";
   mercurial = wrapInsecureArgBin super.mercurial "hg" "--insecure";
-  subversion = wrapInsecureArgBin super.mercurial "svn" "--trust-server-cert";
+  subversion = wrapInsecureArgBin super.subversion "svn" "--non-interactive\\ --trust-server-cert";
 
   fetchs3 = unsafeFetcher "fetchs3" "the secret access key and session token will be stored in the Nix store";
   fetchsvnssh = unsafeFetcher "fetchsvnssh" "the SSH user and password will be stored in the Nix store";
