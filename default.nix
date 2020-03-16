@@ -1,6 +1,6 @@
 { stdenv, callPackage, fetchFromGitHub, makeWrapper
 , asciidoc, docbook_xml_dtd_45, docbook_xsl, libxml2, libxslt
-, coreutils, gawk, gnugrep, gnused, jq, nix }:
+, coreutils, gawk, gnugrep, gnused, jq, nix, git }:
 
 with stdenv.lib;
 
@@ -43,7 +43,7 @@ stdenv.mkDerivation rec {
 
     mkdir -p $out/bin
     makeWrapper $lib/main.sh $out/bin/${pname} \
-      --prefix PATH : '${makeBinPath [ coreutils gawk gnugrep gnused jq nix ]}'
+      --prefix PATH : '${makeBinPath [ coreutils gawk gnugrep gnused jq nix git ]}'
 
     substitute src/tests.sh $lib/tests.sh \
       --subst-var-by bin $out/bin
