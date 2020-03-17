@@ -3,7 +3,7 @@ self: super:
 let
   inherit (super) callPackage;
   pkgs = self;
-  preludeArgsPath = "${builtins.getEnv "XDG_RUNTIME_DIR"}/nix-prefetch/prelude-args.nix";
+  preludeArgsPath = "${builtins.getEnv "TMPDIR"}/prelude-args.nix";
   preludeArgsGiven = builtins.pathExists preludeArgsPath;
   preludeArgs = if preludeArgsGiven then import preludeArgsPath else {
     fetcher = throw "Unknown fetcher.";
