@@ -20,7 +20,7 @@ builtinsOverlay // {
 }
 
 // optionalAttrs preludeArgsGiven (let
-  wrapInsecureArgBin = pkg: name: insecureArg: pkgs.buildEnv {
+  wrapInsecureArgBin = pkg: prefix: name: insecureArg: pkgs.buildEnv {
     name = "secure-${name}";
     paths = [
       pkg
@@ -30,7 +30,7 @@ builtinsOverlay // {
         for arg in "$@"; do
           [[ $arg != ${insecureArg} ]] && args+=( "$arg" )
         done
-        ${pkg}/bin/${name} "''${args[@]}"
+        ${prefix} ${pkg}/bin/${name} "''${args[@]}"
       ''))
     ];
   };
@@ -83,9 +83,9 @@ builtinsOverlay // {
   fetchers = primitiveFetchers ++ topLevelFetchers ++ optional (fetcher.type or null == "attr") fetcher.name;
 
 in genFetcherOverlay fetcherSuperPkgs fetchers // {
-  bazaar = wrapInsecureArgBin super.bazaar "bzr" "-Ossl.cert_reqs=none";
-  mercurial = wrapInsecureArgBin super.mercurial "hg" "--insecure";
-  subversion = wrapInsecureArgBin super.mercurial "svn" "--trust-server-cert";
+  bazaar = wrapInsecureArgBin super.bazaar "" "bzr" "-Ossl.cert_reqs=none";
+  mercurial = wrapInsecureArgBin super.mercurial "" "hg" "--insecure";
+  subversion = wrapInsecureArgBin super.subversion "env --ignore-environment SSL_CERT_FILE=${cacert}/etc/ssl/certs/ca-bundle.crt" "svn" "--trust-server-cert";
 
   fetchs3 = unsafeFetcher "fetchs3" "the secret access key and session token will be stored in the Nix store";
   fetchsvnssh = unsafeFetcher "fetchsvnssh" "the SSH user and password will be stored in the Nix store";

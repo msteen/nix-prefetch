@@ -39,7 +39,7 @@ stdenv.mkDerivation rec {
       --subst-var-by version '${version}'
     chmod +x $lib/main.sh
     patchShebangs $lib/main.sh
-    cp lib/*.nix $lib/
+    cp -r lib/. $lib/
 
     mkdir -p $out/bin
     makeWrapper $lib/main.sh $out/bin/${pname} \
