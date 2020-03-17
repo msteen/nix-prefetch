@@ -1,3 +1,17 @@
+## 0.3.1
+
+Fixed the overlay referencing mecurial rather than subversion for the subversion package.
+Made sure subversion can find the trusted root certificates, so HTTPS does not fail.
+Allowed `nix-prefetch` to be called concurrently by using `mktemp` directories rather than a fixed location.
+
+## 0.3.0
+
+Fixed potentially being overly aggressive with the scopedImport optimization.
+Fixed issue #1 by allowing arbitrary Nix expressions to be passed with `--input`.
+Fixed issue #2 by no longer inlining the overlay, and thus fixing relative imports.
+Automated updating the examples.
+Added support for `--arg`/`--argstr`/`-I`/`--option` flags.
+
 ## 0.2.0
 
 Added a `--force-https` flag.

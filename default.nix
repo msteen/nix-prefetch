@@ -1,31 +1,21 @@
-{ stdenv, callPackage, fetchFromGitHub, makeWrapper
+{ stdenv, nix-gitignore, makeWrapper
 , asciidoc, docbook_xml_dtd_45, docbook_xsl, libxml2, libxslt
 , coreutils, gawk, gnugrep, gnused, jq, nix, git }:
 
 with stdenv.lib;
 
-with callPackage (fetchFromGitHub {
-  owner = "siers";
-  repo = "nix-gitignore";
-  rev = "cc962a73113dbb32407d5099c4bf6f7ecf5612c9";
-  sha256 = "08mgdnb54rhsz4024hx008dzg01c7kh3r45g068i7x91akjia2cq";
-}) { };
-
 stdenv.mkDerivation rec {
   name = "${pname}-${version}";
   pname = "nix-prefetch";
-  version = "0.3.0";
+  version = "0.3.1";
+  date = "2020-03-17";
 
-  src = gitignoreSource [ ".git" ] ./.;
+  src = nix-gitignore.gitignoreSource [ ".git" ] ./.;
 
   nativeBuildInputs = [
     makeWrapper
     asciidoc docbook_xml_dtd_45 docbook_xsl libxml2 libxslt
   ];
-
-  configurePhase = ''
-    . configure.sh
-  '';
 
   buildPhase = ''
     a2x -f manpage doc/nix-prefetch.1.asciidoc
@@ -36,7 +26,7 @@ stdenv.mkDerivation rec {
     mkdir -p $lib
     substitute src/main.sh $lib/main.sh \
       --subst-var-by lib $lib \
-      --subst-var-by version '${version}'
+      --subst-var-by version "$version"
     chmod +x $lib/main.sh
     patchShebangs $lib/main.sh
     cp -r lib/. $lib/
@@ -52,7 +42,7 @@ stdenv.mkDerivation rec {
 
     mkdir -p $out/share/man/man1
     substitute doc/nix-prefetch.1 $out/share/man/man1/nix-prefetch.1 \
-      --subst-var-by version '${version}' \
+      --subst-var-by version "$version" \
       --replace '01/01/1970' "$date"
 
     install -D contrib/nix-prefetch-completion.bash $out/share/bash-completion/completions/nix-prefetch
