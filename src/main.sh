@@ -161,7 +161,7 @@ nix_eval_args=()
 nix_eval() {
   local output_type=$1; shift
   local nix=$1; shift
-  nix eval "$output_type" "(
+  nix eval "$output_type" --impure --expr "(
     let
       args = ${args_nix};
       prelude = import ($lib_nix/prelude.nix) { inherit (args) fetcher forceHTTPS; };
