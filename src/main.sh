@@ -243,7 +243,7 @@ handle_common() {
   nixpkgs_overlays=$TMPDIR/overlays
   if [[ -f $overlays ]]; then
     nixpkgs_overlays+=.nix
-    printf '%s ++ [ (import %s) ]\n' "$(< "$overlays")" "($lib_nix/overlay.nix)" > "$nixpkgs_overlays"
+    printf 'import (%s) ++ [ (import (%s)) ]\n' "$overlays" "$lib_nix/overlay.nix" > "$nixpkgs_overlays"
   else
     mkdir "$nixpkgs_overlays"
     [[ -n $overlays ]] && ln -s "$overlays/"* "$nixpkgs_overlays/"
