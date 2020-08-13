@@ -157,11 +157,15 @@ EOF
   fi
 }
 
+# The version of Nix with Flakes support requires the expression to be passed through flags,
+# which are not present in previous versions, so to be backwards compatible, we conditionally pass them.
+# The `nix-command` feature is not enabled by default, so enable it explicitly just in case.
+nix flake --help &>/dev/null && nix_eval_expr_args=( --impure --expr --experimental-features nix-command ) || nix_eval_expr_args=()
 nix_eval_args=()
 nix_eval() {
   local output_type=$1; shift
   local nix=$1; shift
-  nix eval "$output_type" "(
+  nix eval "${nix_eval_expr_args[@]}" "$output_type" "(
     let
       args = ${args_nix};
       prelude = import ($lib_nix/prelude.nix) { inherit (args) fetcher forceHTTPS; };
@@ -568,7 +572,8 @@ issue_no_hash_mismatch() {
 hash_from_err() {
   # The hash mismatch error message has changed in version 2.2 of Nix, swapping the order of the reported hashes.
   # https://github.com/NixOS/nix/commit/5e6fa9092fb5be722f3568c687524416bc746423
-  if ! actual_hash=$(grep --only-matching "[a-z0-9]\{${actual_hash_size}\}" <<< "$err" > >( [[ $err == *'instead of the expected hash'* ]] && head -1 || tail -1 )); then
+  local head_or_tail=$([[ $err == *'instead of the expected hash'* ]] && echo head || echo tail)
+  if ! actual_hash=$(grep --extended-regexp --only-matching "[a-z0-9]\{${actual_hash_size}\}|${hash_algo}-[A-Za-z0-9/+=]+" <<< "$err" > >($head_or_tail -1)); then
     (( debug )) && [[ -n $out ]] && printf '%s\n' "$out" >&2
     [[ -n $err ]] && sed '/./,$!d' <<< "$err" >&2
     exit 1
