@@ -573,7 +573,7 @@ hash_from_err() {
   # The hash mismatch error message has changed in version 2.2 of Nix, swapping the order of the reported hashes.
   # https://github.com/NixOS/nix/commit/5e6fa9092fb5be722f3568c687524416bc746423
   local head_or_tail=$([[ $err == *'instead of the expected hash'* ]] && echo head || echo tail)
-  if ! actual_hash=$(grep --extended-regexp --only-matching "[a-z0-9]\{${actual_hash_size}\}|${hash_algo}-[A-Za-z0-9/+=]+" <<< "$err" > >($head_or_tail -1)); then
+  if ! actual_hash=$(grep --extended-regexp --only-matching "[a-z0-9]{${actual_hash_size}}|${hash_algo}-[A-Za-z0-9/+=]+" <<< "$err" > >($head_or_tail -1)); then
     (( debug )) && [[ -n $out ]] && printf '%s\n' "$out" >&2
     [[ -n $err ]] && sed '/./,$!d' <<< "$err" >&2
     exit 1
