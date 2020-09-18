@@ -1,0 +1,27 @@
+name: "Test"
+on:
+  pull_request:
+  push:
+
+jobs:
+  tests:
+    strategy:
+      matrix:
+        os: [ ubuntu-latest ]
+        nix-install-url:
+          - https://nixos.org/nix/install
+          - https://github.com/numtide/nix-flakes-installer/releases/download/nix-2.4pre20200618_377345e/install
+    runs-on: ${{ matrix.os }}
+    steps:
+    - uses: actions/checkout@v2
+    - uses: cachix/install-nix-action@v10
+      with:
+        install_url: ${{ matrix.nix-install-url }}
+    - name: Prevent garbage collections of gcroots
+      run:
+        printf "keep-outputs = true\nkeep-derivations = true\nexperimental-features = nix-command flakes\n" | sudo tee -a /etc/nix/nix.conf;
+    - name: Restart nix-daemon with systemctl
+      run:
+        sudo systemctl restart nix-daemon
+    - run:
+        nix-shell -I nixpkgs=https://github.com/NixOS/nixpkgs-channels/archive/nixpkgs-unstable.tar.gz ci.nix --run 'true'
