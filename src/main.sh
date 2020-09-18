@@ -160,12 +160,12 @@ EOF
 # The version of Nix with Flakes support requires the expression to be passed through flags,
 # which are not present in previous versions, so to be backwards compatible, we conditionally pass them.
 # The `nix-command` feature is not enabled by default, so enable it explicitly just in case.
-nix flake --help &>/dev/null && nix_eval_expr_args=( --impure --expr --experimental-features nix-command ) || nix_eval_expr_args=()
+nix flake --help &>/dev/null && nix_eval_expr_args=( --experimental-features nix-command --impure --expr ) || nix_eval_expr_args=()
 nix_eval_args=()
 nix_eval() {
   local output_type=$1; shift
   local nix=$1; shift
-  nix eval "${nix_eval_expr_args[@]}" "$output_type" "(
+  nix eval "$output_type" "${nix_eval_expr_args[@]}" "(
     let
       args = ${args_nix};
       prelude = import ($lib_nix/prelude.nix) { inherit (args) fetcher forceHTTPS; };
