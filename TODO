@@ -17,3 +17,4 @@
 ☐ Allow flags to be lowercase seperated by dashes, e.g. --showURLs would become --show-urls.
 ✔ The overlays linking workaround does not work when `nix-prefetch` is called concurrently. @done (3/17/2020, 11:22:42 AM)
 ✔ Fix SVN prefetcher according to what was mentioned in PR #5. @done (3/17/2020, 3:08:39 AM)
+☐ How to deal with bash read prompts when tests use stdin.

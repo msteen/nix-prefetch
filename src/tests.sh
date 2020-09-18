@@ -10,6 +10,20 @@ die() {
   exit 1
 }
 
+# Allow the source to be used directly when developing.
+# To prevent `--subst-var-by bin` from replacing the string literal in the equality check,
+# the string literal for it has been broken up.
+if [[ $bin == '@''bin''@' ]]; then
+  case $PWD in
+    */nix-prefetch/src) nix_prefetch=./main.sh;;
+    */nix-prefetch/lib) nix_prefetch=../src/main.sh;;
+    */nix-prefetch) nix_prefetch=./src/main.sh;;
+    *) die "The tests script for nix-prefetch called from an unsupported location: $PWD."
+  esac
+else
+  nix_prefetch=$bin/nix-prefetch
+fi
+
 quote_args() {
   for arg in "$@"; do
     printf '%s ' "$( [[ $arg =~ ^[a-zA-Z0-9_\.-]+$ ]] <<< "$arg" && printf '%s' "$arg" || printf '%s' "'${arg//'/\\'}'" )"
@@ -41,10 +55,10 @@ run() {
   if [[ $1 == not && $2 == nix-prefetch ]]; then
     shift # not
     shift # nix-prefetch
-    ! nix-prefetch "$@"
+    ! $nix_prefetch "$@"
   elif [[ $1 == nix-prefetch ]]; then
     shift # nix-prefetch
-    nix-prefetch "$@"
+    $nix_prefetch "$@"
   else
     echo "invalid command: $*" >&2
   fi
@@ -64,22 +78,6 @@ run-test() {
       confirm "Do you want to retry?" || break
     fi
   done
-}
-
-nix-prefetch() {
-  # Allow the source to be used directly when developing.
-  # To prevent `--subst-var-by bin` from replacing the string literal in the equality check,
-  # the string literal for it has been broken up.
-  if [[ $bin == '@''bin''@' ]]; then
-    case $PWD in
-      */nix-prefetch/src) ./main.sh "$@";;
-      */nix-prefetch/lib) ../src/main.sh "$@";;
-      */nix-prefetch) ./src/main.sh "$@";;
-      *) die "The tests script for nix-prefetch called from an unsupported location: $PWD."
-    esac
-  else
-    $bin/nix-prefetch "$@"
-  fi
 }
 
 run-test nix-prefetch --list
@@ -102,9 +100,9 @@ run-test nix-prefetch fetchurl --url mirror://gnu/hello/hello-2.10.tar.gz
 run-test nix-prefetch '{ pkgs ? import <nixpkgs> { } }: pkgs.fetchurl' --url mirror://gnu/hello/hello-2.10.tar.gz
 run-test nix-prefetch kore --fetchurl
 run-test nix-prefetch fetchhg --input nix <<< '{
-  url = "https://bitbucket.com/zck/2048.el";
-  rev = "ea6c3bce8ac1";
-  sha256 = "1p9qn9n8mfb4z62h1s94mlg0vshpzafbhsxgzvx78sqlf6bfc80l";
+  url = "https://bitbucket.org/rafaelgg/slmenu/";
+  rev = "7e74fa5db73e8b018da48d50dbbaf11cb5c62d13";
+  sha256 = "0zb7mm8344d3xmvrl62psazcabfk75pp083jqkmywdsrikgjagv6";
 }'
 run-test nix-prefetch fetchurl --urls --expr '[ mirror://gnu/hello/hello-2.10.tar.gz ]'
 run-test nix-prefetch '{ x }: x' --arg x fetchurl --url mirror://gnu/hello/hello-2.10.tar.gz
@@ -118,4 +116,3 @@ run-test nix-prefetch hello --output json
 run-test nix-prefetch hello --output shell
 run-test nix-prefetch --help
 run-test nix-prefetch --version
-
