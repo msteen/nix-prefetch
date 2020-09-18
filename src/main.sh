@@ -254,6 +254,9 @@ handle_common() {
     ln -s "$lib/overlay.nix" "$nixpkgs_overlays/~~~nix-prefetch.nix" # `readDir` uses lexical order, and '~' comes last.
   fi
   nix_eval_args+=( -I "nixpkgs-overlays=${nixpkgs_overlays}" )
+
+  # Allow importing the overlay explicitly, but conditionally (only when it is set to 1).
+  export NIX_PREFETCH=1
 }
 
 # Each command should be handled differently and to prevent issues like determinig their priorities,

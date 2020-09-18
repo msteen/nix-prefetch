@@ -1,6 +1,6 @@
 self: super:
 
-let
+if builtins.getEnv "NIX_PREFETCH" == "" then {} else let
   inherit (super) callPackage;
   pkgs = self;
   preludeArgsPath = "${builtins.getEnv "TMPDIR"}/prelude-args.nix";
