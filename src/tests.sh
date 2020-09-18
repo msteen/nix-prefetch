@@ -64,20 +64,21 @@ run() {
   fi
 }
 
+tests_failed=0
+first_test=1
 run-test() {
+  (( first_test )) || echo
+  first_test=0
   if (( ${#script_args[@]} > 0 )); then
     [[ $* == "${script_args[*]}" ]] && script_args=() || return 0
   fi
-  while :; do
-    echo "testing... $(quote_args "$@")"
-    if run "$@" >&2; then
-      echo "$(quote_args "$@")... succeeded!"
-      break
-    else
-      echo "$(quote_args "$@")... failed!"
-      confirm "Do you want to retry?" || break
-    fi
-  done
+  echo "testing... $(quote_args "$@")"
+  if run "$@" >&2; then
+    echo "$(quote_args "$@")... succeeded!"
+  else
+    echo "$(quote_args "$@")... failed!"
+    (( tests_failed++ ))
+  fi
 }
 
 run-test nix-prefetch --list
@@ -99,11 +100,6 @@ run-test nix-prefetch rsync --index 0
 run-test nix-prefetch fetchurl --url mirror://gnu/hello/hello-2.10.tar.gz
 run-test nix-prefetch '{ pkgs ? import <nixpkgs> { } }: pkgs.fetchurl' --url mirror://gnu/hello/hello-2.10.tar.gz
 run-test nix-prefetch kore --fetchurl
-run-test nix-prefetch fetchhg --input nix <<< '{
-  url = "https://bitbucket.org/rafaelgg/slmenu/";
-  rev = "7e74fa5db73e8b018da48d50dbbaf11cb5c62d13";
-  sha256 = "0zb7mm8344d3xmvrl62psazcabfk75pp083jqkmywdsrikgjagv6";
-}'
 run-test nix-prefetch fetchurl --urls --expr '[ mirror://gnu/hello/hello-2.10.tar.gz ]'
 run-test nix-prefetch '{ x }: x' --arg x fetchurl --url mirror://gnu/hello/hello-2.10.tar.gz
 run-test nix-prefetch '{ name }: pkgs.${name}' --argstr name fetchurl --url mirror://gnu/hello/hello-2.10.tar.gz
@@ -116,3 +112,11 @@ run-test nix-prefetch hello --output json
 run-test nix-prefetch hello --output shell
 run-test nix-prefetch --help
 run-test nix-prefetch --version
+
+if ! (( tests_failed )); then
+  echo "All tests ran successfully!" >&2
+  exit 0
+else
+  echo "${tests_failed} tests failed!" >&2
+  exit 1
+fi
