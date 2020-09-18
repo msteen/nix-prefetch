@@ -233,7 +233,14 @@ handle_common() {
 
   if [[ -z $XDG_RUNTIME_DIR ]]; then
     XDG_RUNTIME_DIR=/run/user/$(id -u)
-    [[ -d $XDG_RUNTIME_DIR ]] || die "Could not determine the runtime directory (i.e. XDG_RUNTIME_DIR)."
+    if [[ ! -d $XDG_RUNTIME_DIR ]]; then
+      if [[ -d /run/user ]]; then
+        mkdir /run/user/$(id -u)
+      else
+        [[ -z $TMPDIR ]] && TMPDIR=/tmp
+        XDG_RUNTIME_DIR=$TMPDIR
+      fi
+    fi
     export XDG_RUNTIME_DIR
   fi
 
