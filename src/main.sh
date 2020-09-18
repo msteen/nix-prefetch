@@ -234,12 +234,8 @@ handle_common() {
   if [[ -z $XDG_RUNTIME_DIR ]]; then
     XDG_RUNTIME_DIR=/run/user/$(id -u)
     if [[ ! -d $XDG_RUNTIME_DIR ]]; then
-      if [[ -d /run/user ]]; then
-        mkdir /run/user/$(id -u)
-      else
-        [[ -z $TMPDIR ]] && TMPDIR=/tmp
-        XDG_RUNTIME_DIR=$TMPDIR
-      fi
+      [[ -z $TMPDIR ]] && TMPDIR=/tmp
+      XDG_RUNTIME_DIR=$TMPDIR
     fi
     export XDG_RUNTIME_DIR
   fi
