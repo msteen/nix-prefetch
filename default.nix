@@ -7,8 +7,8 @@ with stdenv.lib;
 stdenv.mkDerivation rec {
   name = "${pname}-${version}";
   pname = "nix-prefetch";
-  version = "0.3.1";
-  date = "2020-03-17";
+  version = "0.4.0";
+  date = "2021-01-15";
 
   src = nix-gitignore.gitignoreSource [ ".git" ] ./.;
 
