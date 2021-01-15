@@ -47,7 +47,7 @@ $(nix-prefetch "$@" 2>&1)
   run-example 'Hash validation' \
     nix-prefetch hello 0000000000000000000000000000000000000000000000000000
   run-example 'A specific file fetcher' \
-    nix-prefetch hello_rs.cargoDeps --fetcher '<nixpkgs/pkgs/build-support/rust/fetchcargo.nix>'
+    nix-prefetch hello_rs.cargoDeps --fetcher '<nixpkgs/pkgs/build-support/rust/fetchCargoTarball.nix>'
   run-example 'List all known fetchers in Nixpkgs' \
     nix-prefetch --list --deep
   run-example 'Get a specialized help message for a fetcher' \

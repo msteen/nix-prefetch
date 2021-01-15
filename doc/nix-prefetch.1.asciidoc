@@ -154,21 +154,21 @@ and can placed both before and after the parameters.
 == Examples
 
 [subs="verbatim,quotes"]
- *nix-prefetch* hello.src 
+ *nix-prefetch* hello.src
  *nix-prefetch* \'{ stdenv, fetchurl }: stdenv.mkDerivation rec {
                   name = "test";
                   src = fetchurl { url = http://ftpmirror.gnu.org/hello/hello-2.10.tar.gz; };
-                }' 
- *nix-prefetch* hello *--check-store* *--verbose* 
- *nix-prefetch* git *--check-store* *--verbose* 
- *nix-prefetch* fetchurl *--urls* *--expr* \'[ mirror://gnu/hello/hello-2.10.tar.gz ]' 
- *nix-prefetch* \'{ name }: pkgs.${name}' *--argstr* name fetchurl *--url* \'mirror://gnu/hello/hello-2.10.tar.gz' 
- *nix-prefetch* openraPackages.engines.bleed *--fetchurl* *--rev* master 
- *nix-prefetch* hello 0000000000000000000000000000000000000000000000000000 
- *nix-prefetch* hello_rs.cargoDeps *--fetcher* \'<nixpkgs/pkgs/build-support/rust/fetchcargo.nix>' 
- *nix-prefetch* *--list* *--deep* 
- *nix-prefetch* fetchFromGitHub *--help* 
- *nix-prefetch* \'(import <nixpkgs> { system = "i686-linux"; }).scilab-bin' 
+                }'
+ *nix-prefetch* hello *--check-store* *--verbose*
+ *nix-prefetch* git *--check-store* *--verbose*
+ *nix-prefetch* fetchurl *--urls* *--expr* \'[ mirror://gnu/hello/hello-2.10.tar.gz ]'
+ *nix-prefetch* \'{ name }: pkgs.${name}' *--argstr* name fetchurl *--url* \'mirror://gnu/hello/hello-2.10.tar.gz'
+ *nix-prefetch* openraPackages.engines.bleed *--fetchurl* *--rev* master
+ *nix-prefetch* hello 0000000000000000000000000000000000000000000000000000
+ *nix-prefetch* hello_rs.cargoDeps *--fetcher* \'<nixpkgs/pkgs/build-support/rust/fetchCargoTarball.nix>'
+ *nix-prefetch* *--list* *--deep*
+ *nix-prefetch* fetchFromGitHub *--help*
+ *nix-prefetch* \'(import <nixpkgs> { system = "i686-linux"; }).scilab-bin'
 
 == Author
 

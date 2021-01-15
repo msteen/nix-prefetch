@@ -88,7 +88,7 @@ Examples
 
 A package source:
 ```
-$ nix-prefetch hello.src 
+$ nix-prefetch hello.src
 The fetcher will be called as follows:
 > fetchurl {
 >   sha256 = "0ssi1wpaf7plaswqqjwigppsg5fyh99vdlb9kzl7c9lng89ndq1i";
@@ -103,7 +103,7 @@ A package without a hash defined:
 $ nix-prefetch '{ stdenv, fetchurl }: stdenv.mkDerivation rec {
                   name = "test";
                   src = fetchurl { url = http://ftpmirror.gnu.org/hello/hello-2.10.tar.gz; };
-                }' 
+                }'
 The package test will be fetched as follows:
 > fetchurl {
 >   sha256 = "0000000000000000000000000000000000000000000000000000";
@@ -115,7 +115,7 @@ The package test will be fetched as follows:
 
 A package checked to already be in the Nix store thats not installed:
 ```
-$ nix-prefetch hello --check-store --verbose 
+$ nix-prefetch hello --check-store --verbose
 The package hello-2.10 will be fetched as follows:
 > fetchurl {
 >   sha256 = "0ssi1wpaf7plaswqqjwigppsg5fyh99vdlb9kzl7c9lng89ndq1i";
@@ -136,7 +136,7 @@ trying https://ftpmirror.gnu.org/hello/hello-2.10.tar.gz
 
 A package checked to already be in the Nix store thats installed (i.e. certain the hash is valid, no need to redownload):
 ```
-$ nix-prefetch git --check-store --verbose 
+$ nix-prefetch git --check-store --verbose
 The package git-minimal-2.18.1 will be fetched as follows:
 > fetchurl {
 >   sha256 = "1dlq120c9vmvp1m9gmgd6m609p2wkgfkljrpb0i002mpbjj091c8";
@@ -148,7 +148,7 @@ The package git-minimal-2.18.1 will be fetched as follows:
 
 Passing a list rather than a string argument:
 ```
-$ nix-prefetch fetchurl --urls --expr '[ mirror://gnu/hello/hello-2.10.tar.gz ]' 
+$ nix-prefetch fetchurl --urls --expr '[ mirror://gnu/hello/hello-2.10.tar.gz ]'
 The fetcher will be called as follows:
 > fetchurl {
 >   sha256 = "0000000000000000000000000000000000000000000000000000";
@@ -160,7 +160,7 @@ The fetcher will be called as follows:
 
 Passing an argument to the expression:
 ```
-$ nix-prefetch '{ name }: pkgs.${name}' --argstr name fetchurl --url 'mirror://gnu/hello/hello-2.10.tar.gz' 
+$ nix-prefetch '{ name }: pkgs.${name}' --argstr name fetchurl --url 'mirror://gnu/hello/hello-2.10.tar.gz'
 The fetcher will be called as follows:
 > fetchurl {
 >   sha256 = "0000000000000000000000000000000000000000000000000000";
@@ -172,7 +172,7 @@ The fetcher will be called as follows:
 
 Modify the Git revision of a call to `fetchFromGitHub`:
 ```
-$ nix-prefetch openraPackages.engines.bleed --fetchurl --rev master 
+$ nix-prefetch openraPackages.engines.bleed --fetchurl --rev master
 The package openra-bleed-9c9cad1 will be fetched as follows:
 > fetchurl {
 >   sha256 = "0100p7wrnnlvkmy581m0gbyg3cvi4i1w3lzx2gq91ndz1sbm8nd2";
@@ -184,7 +184,7 @@ The package openra-bleed-9c9cad1 will be fetched as follows:
 
 Hash validation:
 ```
-$ nix-prefetch hello 0000000000000000000000000000000000000000000000000000 
+$ nix-prefetch hello 0000000000000000000000000000000000000000000000000000
 The package hello-2.10 will be fetched as follows:
 > fetchurl {
 >   sha256 = "0000000000000000000000000000000000000000000000000000";
@@ -198,9 +198,9 @@ error: A hash mismatch occurred for the fixed-output derivation output /nix/stor
 
 A specific file fetcher:
 ```
-$ nix-prefetch hello_rs.cargoDeps --fetcher '<nixpkgs/pkgs/build-support/rust/fetchcargo.nix>' 
+$ nix-prefetch hello_rs.cargoDeps --fetcher '<nixpkgs/pkgs/build-support/rust/fetchCargoTarball.nix>'
 The fetcher will be called as follows:
-> import /wheel/fork/nixpkgs/pkgs/build-support/rust/fetchcargo.nix {
+> import /wheel/fork/nixpkgs/pkgs/build-support/rust/fetchCargoTarball.nix {
 >   cargoUpdateHook = "";
 >   name = "hello_rs-0.1.0";
 >   patches = [  ];
@@ -215,7 +215,7 @@ The fetcher will be called as follows:
 
 List all known fetchers in Nixpkgs:
 ```
-$ nix-prefetch --list --deep 
+$ nix-prefetch --list --deep
 builtins.fetchGit
 builtins.fetchMercurial
 builtins.fetchTarball
@@ -266,7 +266,7 @@ requireFile
 
 Get a specialized help message for a fetcher:
 ```
-$ nix-prefetch fetchFromGitHub --help 
+$ nix-prefetch fetchFromGitHub --help
 Prefetch the fetchFromGitHub function call
 
 Usage:
@@ -315,7 +315,7 @@ Fetcher options (optional):
 
 A package for i686-linux:
 ```
-$ nix-prefetch '(import <nixpkgs> { system = "i686-linux"; }).scilab-bin' 
+$ nix-prefetch '(import <nixpkgs> { system = "i686-linux"; }).scilab-bin'
 The package scilab-bin-6.0.1 will be fetched as follows:
 > fetchurl {
 >   sha256 = "0fgjc2ak3b2qi6yin3fy50qwk2bcj0zbz1h4lyyic9n1n1qcliib";

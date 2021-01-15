@@ -93,7 +93,7 @@ run-test nix-prefetch 'let name = "hello"; in pkgs.${name}'
 run-test nix-prefetch 'callPackage (pkgs.path + /pkgs/applications/misc/hello) { }'
 run-test nix-prefetch --file 'builtins.fetchTarball "channel:nixos-unstable"' hello
 run-test not nix-prefetch hello 0000000000000000000000000000000000000000000000000000
-run-test nix-prefetch hello_rs.cargoDeps --fetcher '<nixpkgs/pkgs/build-support/rust/fetchcargo.nix>'
+run-test nix-prefetch hello_rs.cargoDeps --fetcher '<nixpkgs/pkgs/build-support/rust/fetchCargoTarball.nix>'
 run-test nix-prefetch hello_rs.cargoDeps
 run-test nix-prefetch '(callPackage (import hello_rs.src) { }).cargoDeps'
 run-test nix-prefetch rsync --index 0
