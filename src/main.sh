@@ -571,10 +571,6 @@ EOF
   exit 1
 }
 
-issue_no_hash_mismatch() {
-  issue "A probably-wrong output hash of zeroes has been used, yet it somehow still succeeded in building."
-}
-
 hash_from_err() {
   # The hash mismatch error message has changed in version 2.2 of Nix, swapping the order of the reported hashes.
   # https://github.com/NixOS/nix/commit/5e6fa9092fb5be722f3568c687524416bc746423
@@ -651,11 +647,13 @@ EOF
 }
 
 compute_hash_builtin() {
-  capture_err nix_eval_prefetcher --raw 'prefetcher.drv' && issue_no_hash_mismatch || hash_from_err
+  capture_err nix_eval_prefetcher --raw 'prefetcher.drv'
+  hash_from_err
 }
 
 compute_hash_generic() {
-  capture_err nix-store --quiet --realize "$wrong_drv_path" && issue_no_hash_mismatch || hash_from_err
+  capture_err nix-store --quiet --realize "$wrong_drv_path"
+  hash_from_err
 }
 
 prefetch() {
