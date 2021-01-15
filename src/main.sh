@@ -210,7 +210,7 @@ die_option_name_value() {
 }
 
 show_usage() {
-  { man --pager=cat nix-prefetch | col --no-backspaces --spaces || true; } | awk '
+  { man --pager=cat nix-prefetch | col -bx || true; } | awk '
     $1 == "SYNOPSIS" { print "Usage:"; between=1; next }
     between && $1 ~ /^[A-Z]+$/ { exit }
     between == 1 { match($0, /^ */); between=2 }
