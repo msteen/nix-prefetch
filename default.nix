@@ -1,11 +1,10 @@
-{ stdenv, nix-gitignore, makeWrapper
+{ stdenv, lib, nix-gitignore, makeWrapper
 , asciidoc, docbook_xml_dtd_45, docbook_xsl, libxml2, libxslt
 , coreutils, gawk, gnugrep, gnused, jq, nix, git }:
 
-with stdenv.lib;
+with lib;
 
 stdenv.mkDerivation rec {
-  name = "${pname}-${version}";
   pname = "nix-prefetch";
   version = "0.4.0";
   date = "2021-01-15";
