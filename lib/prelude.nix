@@ -228,5 +228,5 @@ let prelude = with prelude; import ./lib.nix // {
   # The hashes are using base 32 encoding, because the actual output hash being reported in the hash mismatch error message
   # will also be using this encoding. For the purpose of having a probably-wrong output hash,
   # any other valid hash encoding would have been fine though.
-  probablyWrongHashes = mapAttrs (_: length: repeatString length "0") hashEncodings.base32.lengths;
+  probablyWrongHashes = mapAttrs (type: length: "${type}:${repeatString length "0"}") hashEncodings.base32.lengths;
 }; in prelude
