@@ -1,3 +1,9 @@
+## 0.4.1
+
+- More compatible empty check in regex.
+- Remove deprecated `stdenv.lib` and duplicated name.
+- Fix vendor updates when hash is used instead of sha256.
+
 ## 0.4.0
 
 - Experimental flake support.
