@@ -1,3 +1,8 @@
+## 0.4.1
+
+- More compatible empty check in regex.
+- Remove deprecated `stdenv.lib` and duplicated name.
+
 ## 0.4.0
 
 - Experimental flake support.
