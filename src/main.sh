@@ -425,7 +425,7 @@ done
 
 handle_common
 
-[[ $input_type =~ ^(nix|json|shell)?$ ]] || die "Unsupported input type '${input_type}'."
+[[ -z $input_type || $input_type =~ ^(nix|json|shell)$ ]] || die "Unsupported input type '${input_type}'."
 [[ $output_type =~ ^(nix|json|shell|raw)$ ]] || die "Unsupported output type '${output_type}'."
 
 if [[ -v fetcher ]]; then
