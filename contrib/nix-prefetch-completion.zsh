@@ -21,6 +21,7 @@ _nix_prefetch() {
   local params=(
     '-f' '--file' '-A' '--attr' '-E' '--expr' '-i' '--index' '-F' '--fetcher' '--arg' '--argstr' '-I' '--option'
     '-t' '--type' '--hash-algo' '-h' '--hash' '--input' '--output' '--eval'
+    '--experimental-features' '--extra-experimental-features'
   )
   local flags=( -s --silent -q --quiet -v --verbose -vv --debug -l --list --version ) flag
   for flag in --fetchurl --force-https --print-urls --print-path --compute-hash --check-store --autocomplete --help --deep; do

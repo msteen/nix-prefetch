@@ -157,12 +157,40 @@ EOF
   fi
 }
 
-# The version of Nix with Flakes support requires the expression to be passed through flags,
-# which are not present in previous versions, so to be backwards compatible, we conditionally pass them.
-# The `nix-command` feature is not enabled by default, so enable it explicitly just in case.
-nix flake --help &>/dev/null && nix_eval_expr_args=( --experimental-features nix-command --impure --expr ) || nix_eval_expr_args=()
+declare -A experimental_features_status=()
+concat_experimental_features() {
+  local -a experimental_features_array=()
+  for feature in "${!experimental_features_status[@]}"; do
+    (( "${experimental_features_status[$feature]}" )) && experimental_features_array+=( "$feature" );
+  done
+  (( debug )) && echo "Experimnetal Nix features" "${experimental_features_array[@]}" "are enabled" >&2 || true
+  echo "${experimental_features_array[@]}"
+}
+
+declare -i support_flakes
+nix flake --help &>/dev/null && support_flakes=1 || support_flakes=0
 nix_eval_args=()
+# Use --extra-experimental-features by default
+force_experimental_features=0
 nix_eval() {
+  # The version of Nix with Flakes support requires the expression to be passed through flags,
+  # which are not present in previous versions, so to be backwards compatible, we conditionally pass them.
+  # The `nix-command` feature is not enabled by default, so enable it explicitly just in case.
+  local -a nix_eval_expr_args=()
+  if (( support_flakes )); then
+    for feature in "nix-command"; do
+      if (( force_experimental_features )); then
+        (( "${experimental_features_status[$feature]}" )) || die "nix-prefetch expects experimental Nix feature $feature"
+      else
+        experimental_features_status[$feature]=1
+      fi
+    done
+    (( force_experimental_features )) \
+      && nix_eval_expr_args+=( --experimental-features ) \
+      || nix_eval_expr_args+=( --extra-experimental-features )
+    nix_eval_expr_args+=( "$(concat_experimental_features)" )
+    nix_eval_expr_args+=( --impure --expr )
+  fi
   local output_type=$1; shift
   local nix=$1; shift
   nix eval "$output_type" "${nix_eval_expr_args[@]}" "(
@@ -262,6 +290,7 @@ handle_common() {
   export NIX_PREFETCH=1
 }
 
+
 # Each command should be handled differently and to prevent issues like determinig their priorities,
 # we do not allow them to be mixed, so e.g. calling adding --version while also having other arguments,
 # will just result in the help message being shown with an error code.
@@ -355,6 +384,20 @@ while (( $# >= 1 )); do
     --option)
       (( $# >= 2 )) || die_option_name_value
       nix_eval_args+=( --option "$1" "$2" ); shift; shift
+      ;;
+    --extra-experimental-features)
+      (( support_flakes )) || die "The Nix executable $(nix --version) doesn't support specifying experimental features"
+      force_experimental_features=0
+      while read -r -d " " feature; do
+        [[ -n "$feature" ]] && experimental_features_status[$feature]=1 || true
+      done <<< "$1 "; shift
+      ;;
+    --experimental-features)
+      (( support_flakes )) || die "The Nix executable $(nix --version) doesn't support specifying experimental features"
+      force_experimental_features=1
+      while read -r -d " " feature; do
+        [[ -n "$feature" ]] && experimental_features_status[$feature]=1 || true
+      done <<< "$1 "; shift
       ;;
     -s|--silent)  silent=1; quiet=1; verbose=0; debug=0;;
     -q|--quiet)   silent=0; quiet=1; verbose=0; debug=0;;
