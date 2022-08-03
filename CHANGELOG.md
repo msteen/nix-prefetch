@@ -1,3 +1,8 @@
+## 0.4.2
+
+- The main script now defaults to pass to Nix `--extra-experimental-features` instead of `--experimental-features` to pay respect to the environment configuration.
+- Add `--experimental-features` and `--extra-experimental-features` flags to allow temporary configuration overriding. One use case is to enable `builtins.getFlake` when not globally enabled.
+
 ## 0.4.1
 
 - More compatible empty check in regex.

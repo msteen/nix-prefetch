@@ -18,6 +18,7 @@ nix-prefetch - Prefetch any fetcher function call, e.g. package sources
               [*--input* <input-type>] [*--output* <output-type>] [*--print-urls*] [*--print-path*]
               [*--compute-hash*] [*--check-store*] [*-s* | *--silent*] [*-q* | *--quiet*] [*-v* | *--verbose*] [*-vv* | *--debug*] ...
               ([*-f* | *--file*] <file> | [*-A* | *--attr*] <attr> | [*-E* | *--expr*] <expr> | <url>) [<hash>]
+              [ *--experimental-features* | *--extra-experimental-features* ]
               [*--help* | *--autocomplete* | *--eval* <expr>]
               [*--*] [*--<name>* ((*-f* | *--file*) <file> | (*-A* | *--attr*) <attr> | (*-E* | *--expr*) <expr> | <str>)] ...
  *nix-prefetch* [(*-f* | *--file*) <file>] [*--deep*] [*-s* | *--silent*] [*-v* | *--verbose*] [*-vv* | *--debug*] ... (*-l* | *--list*)
@@ -132,6 +133,12 @@ and can placed both before and after the parameters.
 
 *--deep*::
   Rather than only listing the top-level fetchers, deep search Nixpkgs for fetchers (slow).
+
+*--experimental-features*::
+  Set the Nix experimental-features setting.
+
+*--extra-experimental-features*::
+  Append to the Nix experimental-features setting.
 
 *-s*, *--silent*::
   No output to 'stderr'.
