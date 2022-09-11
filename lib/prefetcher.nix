@@ -34,7 +34,11 @@ let
 
   hashSupport = !isBuiltinFetcher || fetcherFunctionArgs ? hash;
 
-  fetcherHashArg = optionalAttrs hashSupport (singleAttr hashAlgo hash);
+  fetcherHashArg =
+    let
+      key = if hashSupport then "hash" else hashAlgo;
+    in
+    singleAttr key hash;
 
   # https://stackoverflow.com/questions/28666357/git-how-to-get-default-branch/54204231#54204231
   gitHEAD = pkgs.writeScript "git-head.sh" ''
@@ -45,7 +49,7 @@ let
   fetcherRevArg = url: { rev = exec [ gitHEAD url ]; };
 
   prefetcherArgs =
-    let args = removeAttrs fetcher.args hashAlgos // fetcherArgs // fetcherHashArg;
+    let args = removeAttrs fetcher.args (hashAlgos ++ [ "hash" ]) // fetcherArgs // fetcherHashArg;
     in args
     // optionalAttrs (fetcherFunctionArgs ? rev && args.rev or "" == "") (
       if fetcher.name == "fetchFromGitHub" && args ? owner && args ? repo then fetcherRevArg (fetcher (prefetcherArgs // { fetchSubmodules = true; })).url
